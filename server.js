@@ -12,9 +12,53 @@ const rooms = new Map();
 const clients = new Map();
 let nextId = 0;
 
+// Endless Survival hall of fame. Memory works with zero setup; optionally use
+// free Upstash Redis REST for storage that survives Render free-service restarts.
+const REDIS_URL=(process.env.UPSTASH_REDIS_REST_URL||'').replace(/\/$/,'');
+const REDIS_TOKEN=process.env.UPSTASH_REDIS_REST_TOKEN||'';
+const boardEnabled=!!(REDIS_URL&&REDIS_TOKEN);
+const BOARD_KEY='crowncrisis:v31:survival:top100';
+let memoryBoard=[];
+const lastPost=new Map();
+function cleanName(s){return typeof s==='string'?(s.replace(/[<>\x00-\x1f]/g,'').trim().slice(0,18)||'Operative'):'Operative'}
+function asInt(value,min,max){let n=Number(value);return Number.isFinite(n)?Math.max(min,Math.min(max,Math.floor(n))):min}
+function sortBoard(list){return list.sort((a,b)=>b.wave-a.wave||b.score-a.score||Date.parse(a.at)-Date.parse(b.at)).slice(0,100)}
+async function redisCmd(args){
+  const reply=await fetch(REDIS_URL,{method:'POST',headers:{Authorization:'Bearer '+REDIS_TOKEN,'Content-Type':'application/json'},body:JSON.stringify(args),signal:AbortSignal.timeout(6000)});
+  if(!reply.ok)throw Error('database returned HTTP '+reply.status);
+  const body=await reply.json();if(body.error)throw Error(body.error);return body.result;
+}
+async function loadScores(){
+  if(!boardEnabled)return {entries:memoryBoard,persistent:false};
+  try{const raw=await redisCmd(['GET',BOARD_KEY]);const entries=JSON.parse(raw||'[]');if(!Array.isArray(entries))throw Error('invalid leaderboard');memoryBoard=sortBoard(entries);return {entries:memoryBoard,persistent:true};}
+  catch(err){console.error('Leaderboard storage offline:',err.message);return {entries:memoryBoard,persistent:false};}
+}
+async function saveScore(data){
+  const entry={id:String(data.id||crypto.randomUUID()).replace(/[^A-Za-z0-9_-]/g,'').slice(0,64),mode:data.mode==='coop'?'coop':'solo',name:cleanName(data.name),wave:asInt(data.wave,1,100000),cleared:asInt(data.cleared,0,100000),score:asInt(data.score,0,1e12),kills:asInt(data.kills,0,1e8),players:Array.isArray(data.players)?data.players.slice(0,4).map(cleanName):[cleanName(data.name)],at:new Date().toISOString()};
+  if(!entry.id)entry.id=crypto.randomUUID();
+  const prior=await loadScores();
+  if(prior.entries.some(e=>e.id===entry.id))return {ok:true,persistent:prior.persistent};
+  memoryBoard=sortBoard([...prior.entries,entry]);
+  if(!boardEnabled)return {ok:true,persistent:false};
+  try{await redisCmd(['SET',BOARD_KEY,JSON.stringify(memoryBoard)]);return {ok:true,persistent:true};}
+  catch(err){console.error('Unable to persist score:',err.message);return {ok:true,persistent:false};}
+}
+function sendJSON(res,code,obj){res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store','Access-Control-Allow-Origin':'same-origin'});res.end(JSON.stringify(obj));}
+
+
 const server = http.createServer((req, res) => {
   let pathname = '/';
   try { pathname = new URL(req.url, 'http://localhost').pathname; } catch { res.writeHead(400).end(); return; }
+  if (pathname === '/api/leaderboard' && req.method==='GET') {loadScores().then(b=>sendJSON(res,200,b)).catch(()=>sendJSON(res,503,{entries:[],persistent:false}));return;}
+  if (pathname === '/api/leaderboard' && req.method==='POST') {
+    const ip=req.socket.remoteAddress||'unknown',now=Date.now();
+    if(now-(lastPost.get(ip)||0)<3000){sendJSON(res,429,{error:'Wait a few seconds before submitting again.'});return;}
+    let body='',size=0;
+    req.on('data',part=>{size+=part.length;if(size<=4096)body+=part.toString();else {req.destroy();}});
+    req.on('end',()=>{try{const info=JSON.parse(body);if(info.mode!=='solo'||!Number.isFinite(Number(info.wave))||!Number.isFinite(Number(info.score)))throw Error('Invalid solo run');lastPost.set(ip,Date.now());
+      saveScore(info).then(r=>sendJSON(res,200,r)).catch(()=>sendJSON(res,503,{error:'Could not store score'}));
+    }catch(err){sendJSON(res,400,{error:'Invalid submission'});}});return;
+  }
   if (pathname === '/health') { res.writeHead(200, {'Content-Type':'application/json'});res.end(JSON.stringify({ok:true,rooms:rooms.size}));return; }
   if (pathname !== '/' && pathname !== '/index.html') {res.writeHead(404).end('Not found');return;}
   fs.readFile(path.join(ROOT,'index.html'), (err, data) => {
@@ -62,7 +106,7 @@ function handle(c,msg){
     if(c.room)leaveRoom(c);
     if(rooms.size>=150){send(c,{type:'error',message:'Server is at room capacity.'});return;}
     c.name=nameText(msg.name);c.hero=Number.isInteger(msg.hero)&&msg.hero>=0&&msg.hero<8?msg.hero:0;c.ready=true;
-    const code=randomCode(),room={code,hostId:c.id,members:new Map([[c.id,c]]),started:false};rooms.set(code,room);c.room=room;
+    const code=randomCode(),room={code,hostId:c.id,members:new Map([[c.id,c]]),started:false,mode:'campaign',runSubmitted:false};rooms.set(code,room);c.room=room;
     broadcastRoster(room);return;
   }
   if(msg.type==='join'){
@@ -80,9 +124,18 @@ function handle(c,msg){
   if(msg.type==='ready'&&!room.started){c.ready=!!msg.ready;broadcastRoster(room);return;}
   if(msg.type==='start'&&c.id===room.hostId&&!room.started){
     if([...room.members.values()].some(u=>!u.ready)){send(c,{type:'error',message:'Everyone must press READY before the host starts.'});return;}
-    room.started=true;notify(room,{type:'start',hostId:c.id,members:roster(room).members});return;
+    room.started=true;room.mode=msg.mode==='endless'?'endless':'campaign';room.startedAt=Date.now();room.runSubmitted=false;notify(room,{type:'start',hostId:c.id,mode:room.mode,members:roster(room).members});return;
   }
   if(!room.started)return;
+  if(msg.type==='restart'&&c.id===room.hostId){room.mode=msg.mode==='endless'?'endless':'campaign';room.runSubmitted=false;return;}
+  if(msg.type==='run_end'&&c.id===room.hostId&&room.mode==='endless'&&!room.runSubmitted){
+    const data=msg.data;if(!data||typeof data!=='object')return;
+    if(!Number.isFinite(Number(data.wave))||!Number.isFinite(Number(data.score)))return;
+    room.runSubmitted=true;
+    const payload={...data,mode:'coop',players:[...room.members.values()].map(member=>member.name),name:c.name};
+    saveScore(payload).then(result=>notify(room,{type:'score_saved',...result})).catch(()=>notify(room,{type:'score_saved',ok:false}));
+    return;
+  }
   if(msg.type==='input' && c.id!==room.hostId){
     const now=Date.now();if(now-c.lastInput<23)return;c.lastInput=now;
     const x=Number(msg.mx),y=Number(msg.my),a=Number(msg.aim);
