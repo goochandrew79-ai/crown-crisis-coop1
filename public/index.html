@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080c1b">
-<title>CROWN//CRISIS — Signature Arsenal (V23)</title>
+<title>CROWN//CRISIS — V31: Endless Survival + Online Co-op</title>
 <style>
 :root{--cyan:#6df7ed;--pink:#ff5ca6;--gold:#ffd46b;--bg:#080c1b;--card:#121b32;--dim:#9aaccc}
 *{box-sizing:border-box}html,body{margin:0;background:#050712;color:#edfaff;font-family:Consolas,'Courier New',monospace;height:100%;overflow:hidden}button{font:inherit;cursor:pointer}#app{height:100dvh;width:100%;display:grid;place-items:center;padding:12px;background:radial-gradient(ellipse at center,#152343 0,#050712 72%)}#gameShell{width:min(100%,calc((100dvh - 24px)*16/9),1280px);aspect-ratio:16/9;position:relative;overflow:hidden;border:none;box-shadow:0 0 0 2px #0a1322,0 0 38px #17446555,0 22px 90px #0009;background:#081122}#game{display:block;width:100%;height:100%;image-rendering:pixelated;touch-action:none}#gameShell.combatCursor #game{cursor:none}#scanlines{position:absolute;inset:0;pointer-events:none;opacity:.17;background:repeating-linear-gradient(to bottom,transparent 0px,transparent 3px,#030817 4px)}.hidden{display:none!important}
@@ -138,8 +138,21 @@
 #coopTeam{position:fixed;z-index:9000;left:12px;top:85px;font:900 11px Consolas,monospace;padding:6px 8px;border:1px solid #5c9ca6;border-radius:5px;background:#0b162ad9;max-width:280px;pointer-events:none;line-height:1.7}#coopTeam .low{color:#ff8b99}#coopExit{position:fixed;z-index:9000;bottom:12px;left:12px;background:#241424e0;border:1px solid #de7287;color:#fff;padding:6px 9px;font:900 10px Consolas,monospace;cursor:pointer}
 @media(max-width:650px){#coopOpen{bottom:8px;left:8px;font-size:10px;padding:8px}#coopTeam{top:96px;font-size:9px;max-width:185px}#coopExit{bottom:75px}}
 </style>
-</head>
-<body>
+ <style id="v31Styles">
+ #menu .menuEndless,#menu .menuScores{position:absolute;right:1.7%;z-index:8;border:2px solid #72f6df;background:#0b2834ed;color:#d6fff5;padding:8px 13px;font:900 clamp(8px,1.12vw,12px) monospace;cursor:pointer;white-space:nowrap;box-shadow:3px 3px #070615}
+ #menu .menuEndless{bottom:17.3%;border-color:#ffe17d;color:#fff0af;background:#3b2a2aee}
+ #menu .menuScores{top:1.5%}
+ #menu .menuEndless:hover,#menu .menuScores:hover{background:#345567;box-shadow:0 0 12px #a1ffd7}
+ #leaderboardPanel{color:#eaf7ff;background:linear-gradient(155deg,#15293a,#130e26);padding:30px;overflow-y:auto;text-align:left}
+ .survivalScoreControls{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin:16px 0}
+ .survivalScoreControls label{display:grid;gap:6px;color:#86ddea;font:900 12px monospace}
+ .survivalScoreControls input,.survivalScoreControls select,.survivalScoreControls button{border:1px solid #69deea;background:#091525;color:#fff5c9;padding:10px;font:900 12px monospace}
+ .survivalScoreControls button{cursor:pointer}.survivalScoreStatus{color:#c0b6e8;font:12px monospace;margin:7px 0}
+ .survivalScoreList{border:1px solid #465a77;max-height:49vh;min-height:110px;overflow-y:auto;background:#080c19bd}
+ .survivalScoreRow{display:grid;grid-template-columns:36px minmax(100px,1fr) 85px 98px;gap:7px;padding:10px 12px;border-bottom:1px solid #344258;align-items:center;font:900 12px monospace}
+ .survivalScoreRow:nth-child(odd){background:#22304455}.survivalScoreRow b{color:#fce098}.survivalScoreRow small{color:#95ccd9;font:10px monospace}
+ @media(max-width:750px){#menu .menuEndless,#menu .menuScores{font-size:7px;padding:5px;right:1%}.survivalScoreRow{font-size:10px;grid-template-columns:25px minmax(70px,1fr) 56px 72px;padding:8px 4px}#leaderboardPanel{padding:14px}}
+ </style> </head> <body>
 <div id="app"><div id="gameShell">
 <canvas id="game" width="960" height="540" aria-label="Angled overhead pixel-art cyberpunk alien shooter"></canvas>
 <div id="scanlines"></div>
@@ -160,22 +173,29 @@
     <div id="achievementGrid" class="achievementGrid"></div>
     <p class="achievementFoot">Progress is saved automatically in this browser. Each row shows the highest number of waves completed in a single regular campaign run. Replaying with another character earns their separate medal.</p>
   </section>
-  <button id="bossRushBtn" class="menuBossRush" aria-label="Play the Mossad Destroyer Shark boss fight">🕷 BOSS RUSH</button>
-  <button id="menuHelpBtn" class="menuHotspot menuBack" type="button" aria-label="Show game controls"><span class="srOnly">Controls</span></button>
+  <button id="endlessBtn" class="menuEndless" type="button" title="Play an ever harder survival run">♾ ENDLESS SURVIVAL</button>
+   <button id="bossRushBtn" class="menuBossRush" aria-label="Play the Mossad Destroyer Shark boss fight">🕷 BOSS RUSH</button>
+   <button id="leaderboardBtn" class="menuScores" type="button">🏆 SURVIVAL SCORES</button>
+   <button id="menuHelpBtn" class="menuHotspot menuBack" type="button" aria-label="Show game controls"><span class="srOnly">Controls</span></button>
   <div id="menuHelp" class="menuHelp hidden" role="dialog" aria-label="Game controls"><strong>CONTROLS</strong><p>WASD / ARROWS: move · MOUSE / J: shoot · E: special · SPACE: dash · C: auto-fire · P: pause / audio mix · M: mute</p><button type="button" id="menuHelpClose">CLOSE</button></div>
 </section>
 <section id="shop" class="panel hidden"><div class="shopHeader"><div><div class="eyebrow">INTER-WAVE BLACK MARKET // INCOMING THREAT</div><div class="shopHeading">BUY BIGGER GUNS.</div><div class="shopSummary" id="shopSummary"></div></div><div class="shopGold" id="shopGold">◈ 0</div></div><div id="shopGrid" class="shopGrid"></div><div class="shopFoot"><div class="shopTip" id="shopTip">Bigger guns, armor, jet boots, rocket launchers and drones visibly change your loadout. Gold carries over.</div><button id="nextWaveBtn" class="primary">LAUNCH NEXT WAVE ▶</button></div></section>
 <section id="pausePanel" class="panel hidden"><div class="eyebrow">GAME INTERRUPTED</div><h2>PAUSED</h2><p style="color:#a9c4d5">The aliens are politely waiting to be blasted.</p><div class="audioSettings" role="group" aria-label="Audio volume"><div class="audioSettingsTitle">♪ ARCADE SOUND MIX</div><label for="sfxVolume">Gunfire & aliens <strong id="sfxVolumeValue">64%</strong></label><input type="range" min="0" max="100" value="64" step="1" id="sfxVolume" aria-label="Sound effects volume"><label for="musicVolume">Wave-clear jingle <strong id="musicVolumeValue">56%</strong></label><input type="range" min="0" max="100" value="56" step="1" id="musicVolume" aria-label="Jingle volume"><small>Press M in gameplay to mute or unmute everything. Settings are saved on this device.</small></div><div class="footerActions" style="justify-content:center"><button id="resumeBtn" class="primary">RESUME ▶</button><button id="menuFromPause" class="secondary">MAIN MENU</button></div></section>
-<section id="endPanel" class="panel hidden"><div class="eyebrow" id="endEyebrow"></div><h2 class="endTitle" id="endTitle"></h2><p class="shopSummary" id="endDescription"></p><div id="careerSummary" class="careerSummary"></div><div class="results"><div class="resultCell"><span>TOTAL SCORE</span><strong id="endScore"></strong></div><div class="resultCell"><span>ALIENS SENT PACKING</span><strong id="endKills"></strong></div><div class="resultCell"><span>WAVES CLEARED</span><strong id="endWaves"></strong></div></div><div id="recordText" style="color:#ffd978;font-size:12px"></div><div class="footerActions"><button id="againBtn" class="primary">TRY AGAIN ▶</button><button id="menuFromEnd" class="secondary">CHARACTER SELECT</button></div></section>
-</div></div></div>
-
-<div id="coopRoot">
+<section id="endPanel" class="panel hidden"><div class="eyebrow" id="endEyebrow"></div><h2 class="endTitle" id="endTitle"></h2><p class="shopSummary" id="endDescription"></p><div id="careerSummary" class="careerSummary"></div><div class="results"><div class="resultCell"><span>TOTAL SCORE</span><strong id="endScore"></strong></div><div class="resultCell"><span>ALIENS SENT PACKING</span><strong id="endKills"></strong></div><div class="resultCell"><span>WAVES CLEARED</span><strong id="endWaves"></strong></div></div><div id="recordText" style="color:#ffd978;font-size:12px"></div><div class="footerActions"><button id="againBtn" class="primary">TRY AGAIN ▶</button><button id="endScoresBtn" class="secondary">🏆 LEADERBOARD</button><button id="menuFromEnd" class="secondary">CHARACTER SELECT</button></div> </section>
+ <section id="leaderboardPanel" class="panel hidden" aria-label="Endless Survival high scores">
+   <div class="eyebrow">CROWN//CRISIS · ENDLESS SURVIVAL</div><h2 class="endTitle">🏆 THE SURVIVORS</h2>
+   <p class="shopSummary">Ranked by deepest wave reached, then score. Keep playing through wave 500 and beyond — the only finish line is defeat.</p>
+   <div class="survivalScoreControls"><label>YOUR SCOREBOARD NAME <input id="survivalName" type="text" maxlength="18" autocomplete="nickname" placeholder="Operative"></label><select id="survivalBoardMode" aria-label="Leaderboard mode"><option value="all">ALL RUNS</option><option value="solo">SOLO</option><option value="coop">CO-OP SQUADS</option></select><button id="survivalRefresh" type="button">REFRESH</button></div>
+   <div class="survivalScoreStatus" id="survivalScoreStatus">Loading scores…</div>
+   <div class="survivalScoreList" id="survivalScoreList">No scores yet.</div>
+   <div class="footerActions"><button id="survivalBoardPlay" class="primary" type="button">PLAY ENDLESS ▶</button><button id="survivalBoardBack" class="secondary" type="button">BACK</button></div>
+ </section> </div></div></div>  <div id="coopRoot">
   <button id="coopOpen" type="button" title="Create or join a four-player online game">🌐 ONLINE CO-OP · 1–4 PLAYERS</button>
   <section id="coopPanel" hidden aria-label="Co-op lobby" role="dialog" aria-modal="true">
     <div class="coopHeader"><div><small>THE INVASION IS BETTER WITH FRIENDS</small><h2>🌐 CROWN//CRISIS CO-OP</h2></div><button id="coopClose" type="button" aria-label="Close lobby">✕</button></div>
     <div id="coopSetup">
       <label>Your nickname <input id="coopName" maxlength="18" placeholder="Operative" value="Operative"></label>
-      <label>Choose your fighter <select id="coopHero"></select></label>
+      <label>Choose your fighter <select id="coopHero"></select></label><label>Match type <select id="coopMode"><option value="campaign">15-Wave Campaign</option><option value="endless">♾ Endless Survival (500+ waves)</option></select></label>
       <div class="coopActions"><button id="coopCreate" type="button">CREATE PRIVATE ROOM</button></div>
       <div class="coopJoinRow"><input id="coopCode" maxlength="6" spellcheck="false" placeholder="6-CHARACTER CODE" aria-label="Room code"><button id="coopJoin" type="button">JOIN ROOM</button></div>
     </div>
@@ -245,11 +265,59 @@ const SHOP=[
 {id:'shield',name:'ENERGY SHIELD',icon:'🔷',desc:'Rechargeable shield + bright protective aura',base:55,scale:1.55,max:4},
 {id:'heal',name:'MEDKIT',icon:'💚',desc:'Restore 52 HP immediately',base:35,scale:1,max:99}
 ];
-let buildings=[],obstacles=[],navSmall=null,navBig=null,navRefresh=0;let bossRushMode=false,bossVictoryTimer=0,sharkDebris=[];const NAVSIZE=30;let navMedium=null,navHeavy=null;let state='menu',selection=0,p=null,level=0,wave=0,cam={x:0,y:0},enemies=[],shots=[],particles=[],floaters=[],effects=[],spawnQueue=[],spawnDelay=0,spawnCool=0,spawnSerial=0,finishTime=0,shake=0,background=null,time=0,hudTick=0,auto=false,attackHeld=false,mouse={x:W/2+130,y:H/2,moved:false},keys=new Set(),joy={x:0,y:0},kills=0,score=0,cleared=0,combo=0,comboTimer=0,record=0,best=0,announceUntil=0,bannerTimer=0;
+let buildings=[],obstacles=[],navSmall=null,navBig=null,navRefresh=0;let bossRushMode=false,bossVictoryTimer=0,sharkDebris=[];
+let endlessMode=false,survivalWave=1,survivalGap=0,survivalSubmitted=false,survivalRunKey='',survivalBoardReturn='menu';
+function getSurvivalName(){return ($('survivalName')?.value||$('coopName')?.value||'Operative').trim().replace(/[<>\x00-\x1f]/g,'').slice(0,18)||'Operative'}
+function isSurvivalBossWave(n){return n%25===0}
+function survivalSpec(n){
+ const q={g:Math.min(65,20+Math.floor(n*.09)),s:Math.min(38,5+Math.floor(n*.063)),b:Math.min(24,2+Math.floor(n*.045))};
+ if(n>=5)q.p=Math.min(23,1+Math.floor(n*.034));if(n>=9)q.c=Math.min(23,1+Math.floor(n*.035));
+ if(n>=18)q.t=Math.min(11,1+Math.floor(n/24));
+ if(n%10===0&&!isSurvivalBossWave(n))q.king=1;
+ if(isSurvivalBossWave(n))q.shark=1;
+ return q;
+}
+function survivalAdvance(){
+ survivalWave++;const nextLevel=Math.floor((survivalWave-1)/3)%5;
+ wave=(survivalWave-1)%3;
+ if(level!==nextLevel){level=nextLevel;makeBackground();p.x=WORLD.w/2;p.y=WORLD.h/2;
+  if(mpStarted&&mpIsHost)for(const a of Object.values(mpPlayers)){a.x=WORLD.w/2+R(-45,45);a.y=WORLD.h/2+R(-45,45);}}
+}
+function survivalSubmit(){
+ if(survivalSubmitted||!endlessMode)return;survivalSubmitted=true;
+ const data={mode:mpStarted?'coop':'solo',wave:Math.max(1,survivalWave),cleared,score,kills,name:getSurvivalName(),players:mpStarted?mpRoster.map(m=>m.name):[getSurvivalName()],id:survivalRunKey};
+ try{const key='crown_crisis_survival_best',old=JSON.parse(localStorage.getItem(key)||'null');if(!old||data.wave>old.wave||data.wave===old.wave&&data.score>old.score)localStorage.setItem(key,JSON.stringify(data));}catch(_){}
+ if(mpStarted){if(mpIsHost)mpSend('run_end',{data});}
+ else fetch('/api/leaderboard',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).catch(()=>{});
+}
+function survivalFinish(){
+ survivalSubmit();state='gameover';showScreen('endPanel');$('bossHUD').classList.add('hidden');
+ $('endEyebrow').textContent=mpStarted?'ENDLESS · SQUAD SURVIVAL ENDED':'ENDLESS SURVIVAL · RUN ENDED';
+ $('endTitle').textContent='SURVIVED TO WAVE '+survivalWave;
+ $('endDescription').textContent='You cleared '+cleared+' waves and scored '+score.toLocaleString()+' points. Capture this screen for your friends, or open the leaderboard below.';
+ $('endScore').textContent=score.toLocaleString();$('endKills').textContent=kills.toLocaleString();$('endWaves').textContent=cleared.toLocaleString();
+ $('recordText').textContent='WAVE '+survivalWave+' REACHED · '+(mpStarted?'CO-OP SQUAD':'SOLO')+' · GAME OVER';
+ $('careerSummary').textContent='Endless Survival never awards 15-wave campaign medals. Your best run is also saved in this browser.';
+}
+async function survivalLoadBoard(){
+ const list=$('survivalScoreList'),status=$('survivalScoreStatus'),mode=$('survivalBoardMode').value;
+ list.replaceChildren();status.textContent='Loading…';
+ try{const response=await fetch('/api/leaderboard',{cache:'no-store'});if(!response.ok)throw Error('Leaderboard temporarily unavailable');
+ const data=await response.json();const entries=(data.entries||[]).filter(r=>mode==='all'||r.mode===mode).slice(0,30);
+ status.textContent=data.persistent?'✓ Persistent scores enabled':'⚠ Temporary server scores — Render restarts may erase this board. Connect free Upstash Redis for permanent records.';
+ if(!entries.length){list.textContent='No survival runs yet. Be the first to set a record!';return;}
+ entries.forEach((r,i)=>{const row=document.createElement('div');row.className='survivalScoreRow';
+  const rank=document.createElement('b'),name=document.createElement('span'),waveNo=document.createElement('span'),points=document.createElement('small');
+  rank.textContent='#'+(i+1);name.textContent=(r.players&&r.players.length>1?r.players.join(' + '):r.name)+' · '+(r.mode==='coop'?'SQUAD':'SOLO');
+  waveNo.textContent='WAVE '+r.wave;points.textContent=Number(r.score||0).toLocaleString()+' pts';row.append(rank,name,waveNo,points);list.append(row);});
+ }catch(e){status.textContent='Leaderboard offline: '+String(e.message||e);list.textContent='You can still compete using end-of-run screenshots.';}
+}
+function survivalOpenBoard(from){survivalBoardReturn=from||'menu';showScreen('leaderboardPanel');$('coopTeam').hidden=true;survivalLoadBoard();}
+const NAVSIZE=30;let navMedium=null,navHeavy=null;let state='menu',selection=0,p=null,level=0,wave=0,cam={x:0,y:0},enemies=[],shots=[],particles=[],floaters=[],effects=[],spawnQueue=[],spawnDelay=0,spawnCool=0,spawnSerial=0,finishTime=0,shake=0,background=null,time=0,hudTick=0,auto=false,attackHeld=false,mouse={x:W/2+130,y:H/2,moved:false},keys=new Set(),joy={x:0,y:0},kills=0,score=0,cleared=0,combo=0,comboTimer=0,record=0,best=0,announceUntil=0,bannerTimer=0;
 try{best=Number(localStorage.getItem('crown_crisis_shooter_best')||0)}catch(e){}
 // CO-OP V30. The lobby creator is the simulation authority. Guests send
 // controls only; they never create enemies, damage targets, or award gold.
-let mpEnabled=false,mpStarted=false,mpIsHost=false,mpSocket=null,mpSelfId='',mpHostId='',mpRoom='',mpRoster=[],mpPlayers={},mpInput={},mpLastSnapshot=0,mpShopKey='',mpEnemySerial=0,mpShotSerial=0;
+let mpMatchMode='campaign';let mpEnabled=false,mpStarted=false,mpIsHost=false,mpSocket=null,mpSelfId='',mpHostId='',mpRoom='',mpRoster=[],mpPlayers={},mpInput={},mpLastSnapshot=0,mpShopKey='',mpEnemySerial=0,mpShotSerial=0;
 const mpPulse={special:false,dash:false};
 function mpSend(type,data={}){if(mpSocket&&mpSocket.readyState===WebSocket.OPEN)mpSocket.send(JSON.stringify({type,...data}));}
 function mpAsActor(actor,fn){const previous=p;p=actor;try{return fn()}finally{p=previous}}
@@ -411,7 +479,7 @@ function sound(type,enemyType){
  uiSound(type);
 }
 let rr=13;function rand(){rr=(rr*1664525+1013904223)>>>0;return rr/4294967296}const R=(a,b)=>a+rand()*(b-a),clamp=(n,a,b)=>Math.max(a,Math.min(b,n)),dist=(a,b,c,d)=>Math.hypot(a-c,b-d),ang=(a,b,c,d)=>Math.atan2(d-b,c-a),angleDelta=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b)),lerp=(a,b,t)=>a+(b-a)*t;
-function showScreen(which){$('bossHUD').classList.add('hidden');$('overlay').classList.toggle('hidden',which==='none');for(const id of ['menu','shop','pausePanel','endPanel'])$(id).classList.toggle('hidden',id!==which);$('hud').classList.toggle('hidden',which==='menu');$('gameShell').classList.toggle('combatCursor',state==='playing'&&which==='none');}
+function showScreen(which){$('bossHUD').classList.add('hidden');$('overlay').classList.toggle('hidden',which==='none');for(const id of ['menu','shop','pausePanel','endPanel','leaderboardPanel'])$(id).classList.toggle('hidden',id!==which);$('hud').classList.toggle('hidden',which==='menu');$('gameShell').classList.toggle('combatCursor',state==='playing'&&which==='none');}
 let menuAvatarData=[];let menuAvatarRAF=0;
 function drawMenuAvatar(meta,ts){
 const {canvas,ctx,idx}=meta,ch=C[idx],t=ts/1000;
@@ -475,24 +543,24 @@ $('menuHelpClose').onclick=()=>$('menuHelp').classList.add('hidden');
 
 function selectHero(i){if(mpEnabled&&mpStarted)return;selection=i;if(mpRoom)mpSend('select',{hero:i});const cards=$('heroGrid').querySelectorAll('.heroCard');cards.forEach((card,j)=>{const chosen=j===selection;card.classList.toggle('selected',chosen);card.setAttribute('aria-pressed',String(chosen))});sound('buy')}
 function makeHeroes(){const grid=$('heroGrid');grid.innerHTML='';C.forEach((ch,i)=>{const el=document.createElement('button');el.type='button';el.className='heroCard'+(i===selection?' selected':'');const area=CARD_HIT_AREAS[i];el.style.left=(area[0]/1672*100)+'%';el.style.top=(area[1]/941*100)+'%';el.style.width=((area[2]-area[0])/1672*100)+'%';el.style.height=((area[3]-area[1])/941*100)+'%';el.setAttribute('aria-label',ch.name+' — '+ch.kind+' — '+ch.power);el.setAttribute('aria-pressed',String(i===selection));el.title=ch.name+' · '+ch.power;el.onclick=()=>selectHero(i);grid.appendChild(el)})}makeHeroes();
-function newGame(){if(mpEnabled&&!mpIsHost)return;if($('achievementsPanel'))$('achievementsPanel').classList.add('hidden');bossRushMode=false;bossVictoryTimer=0;sharkDebris=[];rr=Date.now()>>>0;level=0;wave=0;enemies=[];shots=[];particles=[];floaters=[];effects=[];spawnQueue=[];kills=0;score=0;cleared=0;combo=0;comboTimer=0;auto=false;let ch=C[selection];p={x:WORLD.w/2,y:WORLD.h/2,r:18,hp:ch.hp,maxHp:ch.hp,shield:0,shieldMax:0,shieldRecharge:0,gold:0,facing:0,atkTimer:0,swing:0,specialTimer:0,dashCD:0,dashTime:0,inv:0,blasterCD:0,droneCD:0,slow:0,rapid:0,loot:0,muzzle:0,up:{blade:0,armor:0,speed:0,haste:0,blaster:0,drone:0,shield:0,heal:0},ch};
+function newGame(mode='campaign'){if(mpEnabled&&!mpIsHost)return;endlessMode=mode==='endless';survivalWave=1;survivalGap=0;survivalSubmitted=false;survivalRunKey=String(Date.now())+'-'+Math.random().toString(36).slice(2,10);if($('achievementsPanel'))$('achievementsPanel').classList.add('hidden');bossRushMode=false;bossVictoryTimer=0;sharkDebris=[];rr=Date.now()>>>0;level=0;wave=0;enemies=[];shots=[];particles=[];floaters=[];effects=[];spawnQueue=[];kills=0;score=0;cleared=0;combo=0;comboTimer=0;auto=false;let ch=C[selection];p={x:WORLD.w/2,y:WORLD.h/2,r:18,hp:ch.hp,maxHp:ch.hp,shield:0,shieldMax:0,shieldRecharge:0,gold:0,facing:0,atkTimer:0,swing:0,specialTimer:0,dashCD:0,dashTime:0,inv:0,blasterCD:0,droneCD:0,slow:0,rapid:0,loot:0,muzzle:0,up:{blade:0,armor:0,speed:0,haste:0,blaster:0,drone:0,shield:0,heal:0},ch};
 const padX=Math.abs(VIEW_SHEAR)*H/(2*VIEW_TILT)+3;
 const padY=(H/2)*(1/VIEW_TILT-1)+3;
 cam.x=clamp(p.x-W/2,padX,WORLD.w-W-padX);
 cam.y=clamp(p.y-H/2,padY,WORLD.h-H-padY);
 makeBackground();navRefresh=0;startWave();showScreen('none');}
-function startBossRush(){newGame();bossRushMode=true;level=4;wave=2;cleared=14;p.up.blade=4;p.up.armor=3;p.up.speed=2;p.up.haste=3;p.up.blaster=0;p.up.drone=0;p.up.shield=2;p.maxHp+=60;p.hp=p.maxHp;p.shieldMax=68;p.shield=68;p.gold=400;p.x=WORLD.w/2;p.y=WORLD.h/2;makeBackground();enemies=[];shots=[];spawnQueue=[];spawnDelay=0;spawnCool=0;sharkDebris=[];spawnEnemy('shark');announce('MOSSAD DESTROYER SHARK','EIGHT LEGS. EIGHT TARGETS. ONE VERY BAD DAY.',2.8);updateHud();showScreen('none');$('bossHUD').classList.remove('hidden');updateBossHud();}
+function startBossRush(){newGame();endlessMode=false;bossRushMode=true;level=4;wave=2;cleared=14;p.up.blade=4;p.up.armor=3;p.up.speed=2;p.up.haste=3;p.up.blaster=0;p.up.drone=0;p.up.shield=2;p.maxHp+=60;p.hp=p.maxHp;p.shieldMax=68;p.shield=68;p.gold=400;p.x=WORLD.w/2;p.y=WORLD.h/2;makeBackground();enemies=[];shots=[];spawnQueue=[];spawnDelay=0;spawnCool=0;sharkDebris=[];spawnEnemy('shark');announce('MOSSAD DESTROYER SHARK','EIGHT LEGS. EIGHT TARGETS. ONE VERY BAD DAY.',2.8);updateHud();showScreen('none');$('bossHUD').classList.remove('hidden');updateBossHud();}
 function price(it){return Math.round(it.base*Math.pow(it.scale,p.up[it.id]))}function buy(id){if(mpStarted&&!mpIsHost){if(state==='shop')mpSend('buy',{item:id});return;}if(state!=='shop')return;let it=SHOP.find(q=>q.id===id);if(!it||p.up[id]>=it.max)return;let cost=price(it);if(p.gold<cost){$('shopTip').textContent='NOT ENOUGH GOLD! The aliens are holding the rest.';return}if(id==='heal'&&p.hp>=p.maxHp){$('shopTip').textContent='Full health already. Save that gold for more ammo.';return}p.gold-=cost;p.up[id]++;if(id==='armor'){p.maxHp+=20;p.hp=Math.min(p.maxHp,p.hp+20)}if(id==='shield'){p.shieldMax=30+19*p.up.shield;p.shield=p.shieldMax}if(id==='heal')p.hp=Math.min(p.maxHp,p.hp+52);sound('buy');$('shopTip').textContent=`UPGRADED: ${id==='blade'?WEAPON_NAMES[p.up.blade]:it.name} — your gear looks even more ridiculous.`;renderShop();updateHud()}
-function renderShop(){const grid=$('shopGrid');grid.innerHTML='';SHOP.forEach(it=>{let owned=p.up[it.id],max=owned>=it.max,cost=price(it),afford=p.gold>=cost&&(!max)&&(it.id!=='heal'||p.hp<p.maxHp);let b=document.createElement('button');b.className='shopItem'+(afford?' afford':'');b.disabled=max||!afford;b.innerHTML=`<span class="shopIcon">${it.icon}</span><strong>${it.id==='blade'?('UNLOCK '+WEAPON_NAMES[Math.min(6,owned+1)]):it.name}</strong><small>${it.desc}</small><span class="shopPrice">${max?'MAXED':'◈ '+cost}</span><span class="shopOwned">${it.id==='heal'?'':owned+'/'+it.max}</span>`;b.onclick=()=>buy(it.id);grid.appendChild(b)});$('shopGold').textContent='◈ '+p.gold;const next=LEVELS[level];$('shopSummary').textContent=`WAVE ${cleared} CLEARED  ·  NEXT: DISTRICT ${level+1}/5 — ${next.name}, WAVE ${wave+1}/3`;}
+function renderShop(){const grid=$('shopGrid');grid.innerHTML='';SHOP.forEach(it=>{let owned=p.up[it.id],max=owned>=it.max,cost=price(it),afford=p.gold>=cost&&(!max)&&(it.id!=='heal'||p.hp<p.maxHp);let b=document.createElement('button');b.className='shopItem'+(afford?' afford':'');b.disabled=max||!afford;b.innerHTML=`<span class="shopIcon">${it.icon}</span><strong>${it.id==='blade'?('UNLOCK '+WEAPON_NAMES[Math.min(6,owned+1)]):it.name}</strong><small>${it.desc}</small><span class="shopPrice">${max?'MAXED':'◈ '+cost}</span><span class="shopOwned">${it.id==='heal'?'':owned+'/'+it.max}</span>`;b.onclick=()=>buy(it.id);grid.appendChild(b)});$('shopGold').textContent='◈ '+p.gold;const next=LEVELS[level];$('shopSummary').textContent=endlessMode?`♾ SURVIVAL WAVE ${cleared} CLEARED · NEXT: WAVE ${survivalWave} · SHOP EVERY 5 WAVES`:`WAVE ${cleared} CLEARED  ·  NEXT: DISTRICT ${level+1}/5 — ${next.name}, WAVE ${wave+1}/3`;}
 function openShop(){state='shop';shots=[];p.hp=Math.min(p.maxHp,p.hp+8);
-if(mpStarted&&mpIsHost)for(const actor of Object.values(mpPlayers))if(actor!==p){if(actor.downed){actor.downed=false;actor.hp=Math.max(30,Math.round(actor.maxHp*.4));}actor.hp=Math.min(actor.maxHp,actor.hp+8);if(wave===0&&cleared>0){actor.hp=Math.min(actor.maxHp,actor.hp+30);actor.x=WORLD.w/2+50;actor.y=WORLD.h/2+40;}}if(wave===0&&cleared>0){p.hp=Math.min(p.maxHp,p.hp+30);p.x=WORLD.w/2;p.y=WORLD.h/2;navRefresh=0;}$('shopTip').textContent=(level===4&&wave===2)?'⚠ FINAL BOSS INCOMING: Mossad Destroyer Shark. Target each of the 8 glowing leg joints — the central face is invulnerable!':'Spend your gold! Guns, armor, jet boots, rocket launchers, drones and shields all change the on-screen action.';renderShop();showScreen('shop');}
-function startWave(){state='playing';showScreen('none');enemies=[];shots=[];spawnQueue=[];let spec=LEVELS[level].waves[wave];
+if(mpStarted&&mpIsHost)for(const actor of Object.values(mpPlayers))if(actor!==p){if(actor.downed){actor.downed=false;actor.hp=Math.max(30,Math.round(actor.maxHp*.4));}actor.hp=Math.min(actor.maxHp,actor.hp+8);if(wave===0&&cleared>0){actor.hp=Math.min(actor.maxHp,actor.hp+30);actor.x=WORLD.w/2+50;actor.y=WORLD.h/2+40;}}if(wave===0&&cleared>0){p.hp=Math.min(p.maxHp,p.hp+30);p.x=WORLD.w/2;p.y=WORLD.h/2;navRefresh=0;}$('shopTip').textContent=endlessMode?'ENDLESS SURVIVAL: Recover, upgrade, and fight. Every wave is tougher. Bosses return every 25 waves.':(level===4&&wave===2)?'⚠ FINAL BOSS INCOMING: Mossad Destroyer Shark. Target each of the 8 glowing leg joints — the central face is invulnerable!':'Spend your gold! Guns, armor, jet boots, rocket launchers, drones and shields all change the on-screen action.';renderShop();showScreen('shop');}
+function startWave(){state='playing';showScreen('none');enemies=[];shots=[];spawnQueue=[];let spec=endlessMode?survivalSpec(survivalWave):LEVELS[level].waves[wave];
 // More monsters with a gradual ramp, keeping singular bosses singular.
-const hordeScale=(1.50+level*.035+wave*.025)*(mpStarted&&mpIsHost?1+.42*(mpActiveCount()-1):1);
+const hordeScale=(endlessMode?1:(1.50+level*.035+wave*.025))*(mpStarted&&mpIsHost?1+.42*(mpActiveCount()-1):1);
 for(const [type,count] of Object.entries(spec)){
  const total=(type==='shark'||type==='king')?count:Math.max(count+1,Math.round(count*hordeScale));
  for(let i=0;i<total;i++)spawnQueue.push(type);
-}spawnQueue.sort(()=>rand()-.5);if(spec.king){spawnQueue=spawnQueue.filter(k=>k!=='king');spawnQueue.push('king')}if(spec.shark){spawnQueue=spawnQueue.filter(k=>k!=='shark');spawnQueue.push('shark')}spawnDelay=2.2;spawnCool=0;spawnSerial=0;finishTime=0;bannerTimer=2.4;announce(`DISTRICT ${level+1} · WAVE ${wave+1}`,LEVELS[level].tag,2.4);sound('wave');updateHud()}
+}spawnQueue.sort(()=>rand()-.5);if(spec.king){spawnQueue=spawnQueue.filter(k=>k!=='king');spawnQueue.push('king')}if(spec.shark){spawnQueue=spawnQueue.filter(k=>k!=='shark');spawnQueue.push('shark')}spawnDelay=2.2;spawnCool=0;spawnSerial=0;finishTime=0;bannerTimer=2.4;announce(endlessMode?`ENDLESS WAVE ${survivalWave}`:`DISTRICT ${level+1} · WAVE ${wave+1}`,endlessMode?(isSurvivalBossWave(survivalWave)?'⚠ THE SHARK HUNTS AGAIN':'THE HORDE GROWS STRONGER EVERY WAVE'):LEVELS[level].tag,2.4);sound('wave');updateHud()}
 function announce(s,sub,seconds=1.3){$('msgText').textContent=s;$('msgSub').textContent=sub||'';$('message').style.opacity=1;announceUntil=time+seconds}
 function getAim(){if(mpStarted&&mpIsHost&&p&&Number.isFinite(p._mpAim))return p._mpAim;if(mouse.moved){let q=worldXY(mouse.x,mouse.y);return ang(p.x,p.y,q.x,q.y)}let near=nearest(p.x,p.y,650);if(near){let q=aimPoint(near);return ang(p.x,p.y,q.x,q.y)}return p.facing}
 function nearest(x,y,range=99999){let best=null,d=range*range;for(let e of enemies){if(e.dead)continue;let q=(e.x-x)**2+(e.y-y)**2;if(q<d){d=q;best=e}}return best}
@@ -532,9 +600,9 @@ function spawnEnemy(type){
    const placed=candidates.find(q=>dist(q[0],q[1],p.x,p.y)>250&&!isSolid(q[0],q[1],t.r+10));
    if(placed){x=placed[0];y=placed[1]}
  }
- const elite=(type!=='shark'&&type!=='king')&&rand()<(.09+level*.012);
- let multi=(1+(level*.19)+(wave*.07))*(elite?1.50:1);
- let e={type,x,y,r:t.r,hp:t.hp*multi,maxHp:t.hp*multi,elite,speed:t.speed*(1+level*.075)*(elite?1.035:1),gold:Math.max(1,Math.round(t.gold*(1+level*.12)*(elite?1.55:1))),hit:t.hit,at:R(0,3),shoot:R(.6,2.2),charge:0,chargeCD:R(1,3),angle:R(0,Math.PI*2),slow:0,poison:0,burn:0,flash:0,dead:false,seed:R(0,100),summon:5};if(type==='shark'){const legHP=Math.round(240*(1+level*.12+wave*.05));e.legs=Array.from({length:8},(_,i)=>({i,hp:legHP,maxHp:legHP,broken:false,flash:0}));e.hp=e.maxHp=legHP*8;e.sharkFire=1.8;e.sharkStomp=2.9;e.sharkWarning=0;e.sharkLeg=0;e.sharkSummon=10;e.sharkStep=0.05;e.sharkHint=0;}if(mpStarted&&mpIsHost){const boost=1+.23*(mpActiveCount()-1);e.hp*=boost;e.maxHp*=boost;if(e.legs){for(const leg of e.legs){leg.hp*=boost;leg.maxHp*=boost}}e.netId=++mpEnemySerial;}enemies.push(e);if(type==='shark'){sound('boss');announce('MOSSAD DESTROYER SHARK','HIS BODY IS INVINCIBLE. DESTROY ALL EIGHT LEGS!',3);updateBossHud()}if(type==='king'){sound('boss');announce('THE OVERMIND HAS ARRIVED','FILL THAT THING WITH PLASMA',2.2)}}
+ const elite=(type!=='shark'&&type!=='king')&&rand()<(endlessMode?Math.min(.49,.10+survivalWave*.00074):(.09+level*.012));
+ let multi=(endlessMode?(1+Math.pow(Math.max(0,survivalWave-1)/33,.77)*.67):(1+level*.19+wave*.07))*(elite?1.50:1);
+ let e={type,x,y,r:t.r,hp:t.hp*multi,maxHp:t.hp*multi,elite,speed:t.speed*(1+(endlessMode?Math.min(.59,survivalWave*.0012):level*.075))*(elite?1.035:1),gold:Math.max(1,Math.round(t.gold*(endlessMode?(1+Math.min(2,survivalWave*.004)):(1+level*.12))*(elite?1.55:1))),hit:t.hit*(endlessMode?(1+Math.min(2.2,survivalWave*.0048)):1),at:R(0,3),shoot:R(.6,2.2),charge:0,chargeCD:R(1,3),angle:R(0,Math.PI*2),slow:0,poison:0,burn:0,flash:0,dead:false,seed:R(0,100),summon:5};if(type==='shark'){const legHP=Math.round(395*(1+level*.12+wave*.05)*(endlessMode?1+Math.pow(survivalWave/80,.62)*.32:1));e.legs=Array.from({length:8},(_,i)=>({i,hp:legHP,maxHp:legHP,broken:false,flash:0}));e.hp=e.maxHp=legHP*8;e.sharkFire=1.25;e.sharkStomp=2.1;e.sharkNova=5.4;e.sharkNovaWarn=0;e.sharkWarning=0;e.sharkLeg=0;e.sharkSummon=10;e.sharkStep=0.05;e.sharkHint=0;}if(mpStarted&&mpIsHost){const boost=1+.23*(mpActiveCount()-1);e.hp*=boost;e.maxHp*=boost;if(e.legs){for(const leg of e.legs){leg.hp*=boost;leg.maxHp*=boost}}e.netId=++mpEnemySerial;}enemies.push(e);if(type==='shark'){sound('boss');announce('MOSSAD DESTROYER SHARK','HIS BODY IS INVINCIBLE. DESTROY ALL EIGHT LEGS!',3);updateBossHud()}if(type==='king'){sound('boss');announce('THE OVERMIND HAS ARRIVED','FILL THAT THING WITH PLASMA',2.2)}}
 
 function sharkLegGeometry(e,leg){
  let a=leg.i*Math.PI/4+Math.PI/8+Math.sin(time*2.4+leg.i*2.2)*.06;
@@ -551,20 +619,29 @@ function sharkShotLeg(e,x0,y0,x1,y1,r){let hit=null,best=1e9;for(const leg of e.
 function sharkHitLeg(e,leg,amount,crit=false){if(e.dead||!leg||leg.broken)return;leg.hp=Math.max(0,leg.hp-amount);leg.flash=.18;e.flash=.08;e.hp=e.legs.reduce((sum,k)=>sum+k.hp,0);const g=sharkLegGeometry(e,leg);emit(g.bx,g.by,crit?'#fff5b5':'#ff5c9d',crit?10:5,85);
  if(crit)textFly(g.bx,g.by-12,'CRIT '+Math.round(amount),'#fff4af',15);
  else if(Math.random()<.4)textFly(g.bx,g.by-12,'-'+Math.round(amount),'#ffc2da',11);
- if(leg.hp<=0){leg.broken=true;leg.hp=0;let left=e.legs.filter(k=>!k.broken).length;sharkDebris.push({x:g.bx,y:g.by,a:g.a,life:2,maxLife:2,vx:Math.cos(g.a)*90,vy:Math.sin(g.a)*90,i:leg.i});effects.push({kind:'nova',x:g.bx,y:g.by,r:3,max:115,color:'#ff5c9d',life:.55,maxLife:.55});emit(g.bx,g.by,'#ffce86',25,200);shake=Math.max(shake,3.1);sound('boss');textFly(g.cx,g.cy-16,'LEG '+(leg.i+1)+' DESTROYED!','#ffd37d',17);announce(left?('LEG '+(leg.i+1)+' DESTROYED'):('ALL EIGHT LEGS DESTROYED'),left?(left+' TARGETS REMAIN'):'MOSSAD DESTROYER SHARK HAS FALLEN!',1.25);if(left===0){killEnemy(e);cleared=15;recordCampaignProgress(15);state='bossVictory';bossVictoryTimer=2.3;attackHeld=false;}}
+ if(leg.hp<=0){leg.broken=true;leg.hp=0;let left=e.legs.filter(k=>!k.broken).length;sharkDebris.push({x:g.bx,y:g.by,a:g.a,life:2,maxLife:2,vx:Math.cos(g.a)*90,vy:Math.sin(g.a)*90,i:leg.i});effects.push({kind:'nova',x:g.bx,y:g.by,r:3,max:115,color:'#ff5c9d',life:.55,maxLife:.55});emit(g.bx,g.by,'#ffce86',25,200);shake=Math.max(shake,3.1);sound('boss');textFly(g.cx,g.cy-16,'LEG '+(leg.i+1)+' DESTROYED!','#ffd37d',17);announce(left?('LEG '+(leg.i+1)+' DESTROYED'):('ALL EIGHT LEGS DESTROYED'),left?(left+' TARGETS REMAIN'):'MOSSAD DESTROYER SHARK HAS FALLEN!',1.25);if(left===0){killEnemy(e);if(!endlessMode){cleared=15;recordCampaignProgress(15);state='bossVictory';bossVictoryTimer=2.3;attackHeld=false;}}}
  updateBossHud();}
 function sharkAOETarget(e,fromx=p.x,fromy=p.y){return e.legs.filter(k=>!k.broken).sort((a,b)=>{let u=sharkLegGeometry(e,a),v=sharkLegGeometry(e,b);return dist(fromx,fromy,u.bx,u.by)-dist(fromx,fromy,v.bx,v.by)})[0]}
 function updateBossHud(){let e=enemies.find(q=>q.type==='shark'&&!q.dead);let box=$('bossHUD');if(!e){box.classList.add('hidden');return}box.classList.remove('hidden');let left=e.legs.filter(k=>!k.broken).length;$('bossCount').textContent=left+' / 8 LEGS REMAIN';$('legBars').innerHTML=e.legs.map(k=>`<div class="legBar ${k.broken?'broken':''}" title="Leg ${k.i+1}: ${Math.ceil(k.hp)} HP"><div class="legFill" style="transform:scaleX(${k.hp/k.maxHp})"></div><span>${k.broken?'✕':k.i+1}</span></div>`).join('')}
 function sharkUpdate(e,dt){
  let alive=e.legs.filter(k=>!k.broken),remaining=alive.length;if(!remaining)return;
- e.sharkFire-=dt;e.sharkStomp-=dt;e.sharkSummon-=dt;e.sharkHint=Math.max(0,e.sharkHint-dt);for(let leg of alive)leg.flash=Math.max(0,leg.flash-dt);
+ e.sharkFire-=dt;e.sharkStomp-=dt;e.sharkSummon-=dt;e.sharkNova-=dt;e.sharkHint=Math.max(0,e.sharkHint-dt);for(let leg of alive)leg.flash=Math.max(0,leg.flash-dt);
  const d=dist(e.x,e.y,p.x,p.y),a=ang(e.x,e.y,p.x,p.y),chase=pathAngle(e);
- let movement=e.speed*(remaining/8*.6+.3)*(remaining<=3?1.35:1)*dt;
+ let movement=e.speed*(remaining/8*.6+.35)*(remaining<=3?1.58:1.15)*dt;
  if(d>155)moveSolid(e,Math.cos(chase)*movement,Math.sin(chase)*movement);
- if(e.sharkFire<=0){const shotsNum=remaining<=3?4:remaining<=5?3:2;for(let k=0;k<shotsNum;k++){let leg=alive[(k*3+Math.floor(time*2))%remaining],g=sharkLegGeometry(e,leg),an=ang(g.bx,g.by,p.x,p.y)+(k-(shotsNum-1)/2)*.18;shoot(g.bx,g.by,an,225+(8-remaining)*9,11+(8-remaining)*.65,'#ff72b8',6,false,3.5)}e.sharkFire=remaining<=3?1.15:1.75;}
- if(e.sharkStomp<=0){let leg=alive[Math.floor(R(0,remaining))];e.sharkLeg=leg.i;e.sharkWarning=.65;e.sharkStomp=remaining<=3?2:2.8;e.sharkHint=.65;}
- if(e.sharkWarning>0){e.sharkWarning-=dt;if(e.sharkWarning<=0){let l=e.legs[e.sharkLeg];if(l&&!l.broken){let g=sharkLegGeometry(e,l);effects.push({kind:'nova',x:g.cx,y:g.cy,r:3,max:84,color:'#ff5a79',life:.35,maxLife:.35});emit(g.cx,g.cy,'#ff876d',23,160);if(dist(g.cx,g.cy,p.x,p.y)<75)damagePlayer(20+(8-remaining)*1.5);shake=Math.max(shake,2.7);}}}
- if(e.sharkSummon<=0&&remaining<=5){spawnEnemy('s');if(remaining<=3)spawnEnemy('p');e.sharkSummon=7;}
+ if(e.sharkFire<=0){const shotsNum=remaining<=3?7:remaining<=5?5:4;for(let k=0;k<shotsNum;k++){let leg=alive[(k*3+Math.floor(time*2))%remaining],g=sharkLegGeometry(e,leg),an=ang(g.bx,g.by,p.x,p.y)+(k-(shotsNum-1)/2)*.18;shoot(g.bx,g.by,an,275+(8-remaining)*12,15+(8-remaining)*1.2,'#ff72b8',6,false,3.5)}e.sharkFire=remaining<=3?.62:remaining<=5?.85:1.18;}
+ if(e.sharkStomp<=0){let leg=alive[Math.floor(R(0,remaining))];e.sharkLeg=leg.i;e.sharkWarning=.76;e.sharkStomp=remaining<=3?1.50:2.05;e.sharkHint=.65;}
+ if(e.sharkWarning>0){e.sharkWarning-=dt;if(e.sharkWarning<=0){let l=e.legs[e.sharkLeg];if(l&&!l.broken){let g=sharkLegGeometry(e,l);effects.push({kind:'nova',x:g.cx,y:g.cy,r:3,max:107,color:'#ff5a79',life:.35,maxLife:.35});emit(g.cx,g.cy,'#ff876d',23,160);const victims=mpStarted&&mpIsHost?mpLiving():[p];for(const actor of victims)if(dist(g.cx,g.cy,actor.x,actor.y)<104)mpAsActor(actor,()=>damagePlayer(30+(8-remaining)*2.2));shake=Math.max(shake,2.7);}}}
+ if(e.sharkSummon<=0&&remaining<=6){spawnEnemy('s');spawnEnemy('s');if(remaining<=4)spawnEnemy('p');e.sharkSummon=remaining<=3?3.8:5.3;}
+ // Enrage pulse: players see the expanding danger ring before the spiral of shots.
+ if(e.sharkNova<=0&&e.sharkNovaWarn<=0){e.sharkNovaWarn=.95;e.sharkNova=remaining<=3?4:6;
+   effects.push({kind:'nova',x:e.x,y:e.y,r:35,max:210,color:'#ff347b',life:.95,maxLife:.95});
+   announce('⚠ SHARK CORE OVERLOAD','DODGE THE RADIAL BARRAGE!',.9);}
+ if(e.sharkNovaWarn>0){e.sharkNovaWarn-=dt;
+   if(e.sharkNovaWarn<=0){const count=remaining<=3?22:16,offset=time*.8;
+     for(let k=0;k<count;k++)shoot(e.x,e.y,offset+k*Math.PI*2/count,remaining<=3?265:225,remaining<=3?18:14,'#ff4f9e',5,false,3.7);
+     shake=Math.max(shake,2.0);
+   }}
 }
 
 function emit(x,y,color,n=5,power=70){for(let i=0;i<n;i++){let a=R(0,Math.PI*2),v=R(power*.2,power),life=R(.25,.65);particles.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life,max:life,size:R(1.5,4),color})}if(particles.length>340)particles.splice(0,particles.length-340)}
@@ -694,16 +771,16 @@ shots.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,dmg,color,r,friendly,life,ric:
  owner:visualOwner,visualTier,specialShot:false,createdAt:time,netId:mpStarted&&mpIsHost?++mpShotSerial:0,...extras});
 }
 function damagePlayer(amount){if(p.inv>0)return;let amt=Math.max(2,amount-p.up.armor*1.5);if(p.shield>0){let ab=Math.min(amt,p.shield);p.shield-=ab;amt-=ab;p.shieldRecharge=4.5}if(amt>0)p.hp-=amt;p.inv=.43;shake=Math.max(shake,1.25);sound('hurt');emit(p.x,p.y,'#ff4e83',12,130);if(p.hp<=0){p.hp=0;if(mpStarted&&mpIsHost){p.downed=true;p.inv=9;textFly(p.x,p.y-22,'DOWN! REVIVE [R]','#ff8cb3',15);if(mpLiving().length===0)endGame(false);}else endGame(false)}}
-function endGame(win){if(win&&bossRushMode)sound('victory');$('bossHUD').classList.add('hidden');state=win?'victory':'gameover';if(win&&!bossRushMode)recordCampaignProgress(15);if(score>best){best=score;try{localStorage.setItem('crown_crisis_shooter_best',String(best))}catch(err){}}const medals=campaignMedals(),official=win&&!bossRushMode&&isUltimateVictory();$('endEyebrow').textContent=official?'THE FINAL CROWN HAS BEEN CLAIMED':win?(bossRushMode?'PRACTICE COMPLETE · ACHIEVEMENTS NOT COUNTED':'CAMPAIGN FINISHED · '+medals+' OF 8 CERTIFIED'):'SYSTEM FAILURE // CREW RESPAWN';$('endTitle').textContent=official?'ULTIMATE VICTORY!':win?(bossRushMode?'BOSS RUSH CLEARED!':'OPERATIVE CLEARED!'):'CREW MEMBER DOWN!';$('endTitle').className='endTitle'+(win?' win':'');$('endDescription').textContent=official?'All eight operatives have now conquered all 15 waves. The Mossad Destroyer Shark is gone. Your crew has OFFICIALLY won CROWN//CRISIS!':win?(bossRushMode?'You defeated the eight-legged final boss! Boss Rush is practice only and does not award a 15-wave clearance.':`${p.ch.name} survived all 15 campaign waves and earned a GOLD CROWN medal! ${8-medals} more operative${8-medals===1?'':'s'} still need a full 15-wave campaign clear to unlock the official ending.`):`${p.ch.name} reached District ${level+1}, Wave ${wave+1}. Keep upgrading, and return to clear all 15 waves!`;$('endScore').textContent=score.toLocaleString();$('endKills').textContent=kills.toLocaleString();$('endWaves').textContent=cleared+'/15';$('recordText').textContent='PERSONAL BEST: '+best.toLocaleString()+' POINTS';$('careerSummary').textContent=official?'🏆 THE FINAL CROWN UNLOCKED · 8/8 HEROES · 120/120 WAVES':`🏆 HALL OF HEROES · ${medals}/8 COMPLETE · ${C.reduce((sum,c)=>sum+campaignRecords[c.id],0)}/120 WAVES RECORDED${bossRushMode?' · PRACTICE RUN DOES NOT COUNT':''}`;updateAchievementUI();showScreen('endPanel')}
+function endGame(win){if(endlessMode){survivalFinish();return;}if(win&&bossRushMode)sound('victory');$('bossHUD').classList.add('hidden');state=win?'victory':'gameover';if(win&&!bossRushMode)recordCampaignProgress(15);if(score>best){best=score;try{localStorage.setItem('crown_crisis_shooter_best',String(best))}catch(err){}}const medals=campaignMedals(),official=win&&!bossRushMode&&isUltimateVictory();$('endEyebrow').textContent=official?'THE FINAL CROWN HAS BEEN CLAIMED':win?(bossRushMode?'PRACTICE COMPLETE · ACHIEVEMENTS NOT COUNTED':'CAMPAIGN FINISHED · '+medals+' OF 8 CERTIFIED'):'SYSTEM FAILURE // CREW RESPAWN';$('endTitle').textContent=official?'ULTIMATE VICTORY!':win?(bossRushMode?'BOSS RUSH CLEARED!':'OPERATIVE CLEARED!'):'CREW MEMBER DOWN!';$('endTitle').className='endTitle'+(win?' win':'');$('endDescription').textContent=official?'All eight operatives have now conquered all 15 waves. The Mossad Destroyer Shark is gone. Your crew has OFFICIALLY won CROWN//CRISIS!':win?(bossRushMode?'You defeated the eight-legged final boss! Boss Rush is practice only and does not award a 15-wave clearance.':`${p.ch.name} survived all 15 campaign waves and earned a GOLD CROWN medal! ${8-medals} more operative${8-medals===1?'':'s'} still need a full 15-wave campaign clear to unlock the official ending.`):`${p.ch.name} reached District ${level+1}, Wave ${wave+1}. Keep upgrading, and return to clear all 15 waves!`;$('endScore').textContent=score.toLocaleString();$('endKills').textContent=kills.toLocaleString();$('endWaves').textContent=cleared+'/15';$('recordText').textContent='PERSONAL BEST: '+best.toLocaleString()+' POINTS';$('careerSummary').textContent=official?'🏆 THE FINAL CROWN UNLOCKED · 8/8 HEROES · 120/120 WAVES':`🏆 HALL OF HEROES · ${medals}/8 COMPLETE · ${C.reduce((sum,c)=>sum+campaignRecords[c.id],0)}/120 WAVES RECORDED${bossRushMode?' · PRACTICE RUN DOES NOT COUNT':''}`;updateAchievementUI();showScreen('endPanel')}
 function updateHud(){if(!p)return;
 $('heroName').textContent=p.ch.name.toUpperCase()+' · '+WEAPON_NAMES[p.up.blade];
 $('hpFill').style.width=(100*p.hp/p.maxHp)+'%';$('shieldFill').style.width=(p.shieldMax?100*p.shield/p.shieldMax:0)+'%';
 $('hpText').textContent=Math.ceil(p.hp)+' / '+p.maxHp+' HP  ·  '+(p.specialTimer>0?'SUPER '+p.specialTimer.toFixed(1)+'s':'SUPER READY')+'  ·  AUTO '+(auto?'ON':'OFF');
-$('levelText').textContent='DISTRICT '+(level+1)+' · '+LEVELS[level].name;
-$('waveText').textContent='WAVE '+(wave+1)+'/3  ·  '+(enemies.filter(e=>!e.dead).length+spawnQueue.length)+' ALIENS';
+$('levelText').textContent=endlessMode?'♾ ENDLESS · '+LEVELS[level].name:'DISTRICT '+(level+1)+' · '+LEVELS[level].name;
+$('waveText').textContent=endlessMode?'SURVIVAL WAVE '+survivalWave+' · '+(enemies.filter(e=>!e.dead).length+spawnQueue.length)+' ALIENS':'WAVE '+(wave+1)+'/3  ·  '+(enemies.filter(e=>!e.dead).length+spawnQueue.length)+' ALIENS';
 $('goldText').textContent='◈ '+p.gold.toLocaleString();$('scoreText').textContent='SCORE '+score.toLocaleString()+' · '+kills+' KILLS';
 $('comboText').textContent=combo>1?combo+'x COMBO':'SHOOT THE INVADERS';if(mpStarted&&mpIsHost)mpRenderTeam()}
-function tick(dt){if(mpStarted&&!mpIsHost){time+=dt;hudTick-=dt;if(hudTick<=0&&p){updateHud();hudTick=.12;}return;}time+=dt;if(announceUntil&&time>announceUntil){$('message').style.opacity=0;announceUntil=0}if(state==='bossVictory'){bossVictoryTimer-=dt;for(let f of particles){f.x+=f.vx*dt;f.y+=f.vy*dt;f.life-=dt}particles=particles.filter(f=>f.life>0);for(let f of effects)f.life-=dt;effects=effects.filter(f=>f.life>0);if(bossVictoryTimer<=0)endGame(true);return}if(state!=='playing'){return}if(!p)return;hudTick-=dt;if(hudTick<=0){updateHud();hudTick=.11}shake=Math.max(0,shake-42*dt);if(comboTimer>0){comboTimer-=dt;if(comboTimer<=0)combo=0};p.inv=Math.max(0,p.inv-dt);p.atkTimer=Math.max(0,p.atkTimer-dt);p.swing=Math.max(0,p.swing-dt);p.specialTimer=Math.max(0,p.specialTimer-dt);p.dashCD=Math.max(0,p.dashCD-dt);p.rapid=Math.max(0,p.rapid-dt);p.loot=Math.max(0,p.loot-dt);p.muzzle=Math.max(0,p.muzzle-dt);p.dashTime=Math.max(0,p.dashTime-dt);p.shieldRecharge=Math.max(0,p.shieldRecharge-dt);if(p.shieldRecharge<=0&&p.shield<p.shieldMax)p.shield=Math.min(p.shieldMax,p.shield+8*dt);
+function tick(dt){if(mpStarted&&!mpIsHost){time+=dt;hudTick-=dt;if(hudTick<=0&&p){updateHud();hudTick=.12;}return;}time+=dt;if(announceUntil&&time>announceUntil){$('message').style.opacity=0;announceUntil=0}if(state==='waveBreak'){survivalGap-=dt;if(survivalGap<=0)startWave();return}if(state==='bossVictory'){bossVictoryTimer-=dt;for(let f of particles){f.x+=f.vx*dt;f.y+=f.vy*dt;f.life-=dt}particles=particles.filter(f=>f.life>0);for(let f of effects)f.life-=dt;effects=effects.filter(f=>f.life>0);if(bossVictoryTimer<=0)endGame(true);return}if(state!=='playing'){return}if(!p)return;hudTick-=dt;if(hudTick<=0){updateHud();hudTick=.11}shake=Math.max(0,shake-42*dt);if(comboTimer>0){comboTimer-=dt;if(comboTimer<=0)combo=0};p.inv=Math.max(0,p.inv-dt);p.atkTimer=Math.max(0,p.atkTimer-dt);p.swing=Math.max(0,p.swing-dt);p.specialTimer=Math.max(0,p.specialTimer-dt);p.dashCD=Math.max(0,p.dashCD-dt);p.rapid=Math.max(0,p.rapid-dt);p.loot=Math.max(0,p.loot-dt);p.muzzle=Math.max(0,p.muzzle-dt);p.dashTime=Math.max(0,p.dashTime-dt);p.shieldRecharge=Math.max(0,p.shieldRecharge-dt);if(p.shieldRecharge<=0&&p.shield<p.shieldMax)p.shield=Math.min(p.shieldMax,p.shield+8*dt);
 let mx=(keys.has('d')||keys.has('arrowright')?1:0)-(keys.has('a')||keys.has('arrowleft')?1:0)+joy.x,my=(keys.has('s')||keys.has('arrowdown')?1:0)-(keys.has('w')||keys.has('arrowup')?1:0)+joy.y,mag=Math.hypot(mx,my),norm=mag>0?Math.max(1,mag):1;mx/=norm;my/=norm;
 let vel=(215+p.up.speed*29)*p.ch.speed*(p.dashTime>0?3.65:1);p.moving=mag;p.walkTime=(p.walkTime||0)+mag*(p.dashTime>0?22:12)*dt;if(!p.downed)moveSolid(p,mx*vel*dt,my*vel*dt);
 if(p.up.speed>0&&mag>.1&&rand()<Math.min(.8,dt*(9+p.up.speed*4)))emit(p.x-mx*12,p.y-my*12,p.ch.accent,1,18);
@@ -817,7 +894,7 @@ for(let s of shots){
 }
 
 shots=shots.filter(s=>s.life>0);enemies=enemies.filter(e=>!e.dead);for(let deb of sharkDebris){deb.life-=dt;deb.x+=deb.vx*dt;deb.y+=deb.vy*dt;deb.vx*=.965;deb.vy*=.965;}sharkDebris=sharkDebris.filter(q=>q.life>0);for(let e of effects)e.life-=dt;effects=effects.filter(e=>e.life>0);for(let f of floaters){f.life-=dt;f.y-=32*dt}floaters=floaters.filter(f=>f.life>0);for(let f of particles){f.x+=f.vx*dt;f.y+=f.vy*dt;f.vx*=.95;f.vy*=.95;f.life-=dt}particles=particles.filter(f=>f.life>0);
-if(!spawnQueue.length&&!enemies.length&&spawnDelay<=0){finishTime+=dt;if(finishTime>1){cleared++;recordCampaignProgress(cleared);sound(cleared===15&&!bossRushMode?'victory':'clear');if(level===4&&wave===2){endGame(true);return}if(wave===2){level++;wave=0;makeBackground()}else wave++;openShop();return}}else finishTime=0;
+if(!spawnQueue.length&&!enemies.length&&spawnDelay<=0){finishTime+=dt;if(finishTime>1){cleared++;if(!endlessMode)recordCampaignProgress(cleared);sound(cleared===15&&!bossRushMode&&!endlessMode?'victory':'clear');if(endlessMode){survivalAdvance();if(cleared===3||cleared%5===0){openShop();return}state='waveBreak';survivalGap=2.25;showScreen('none');announce('WAVE '+cleared+' CLEARED','NEXT: WAVE '+survivalWave+' · NO SHOP THIS ROUND',1.75);return}if(level===4&&wave===2){endGame(true);return}if(wave===2){level++;wave=0;makeBackground()}else wave++;openShop();return}}else finishTime=0;
 }
 // WORLD GEOMETRY: the drawn building footprints and the physics are the very same rectangles.
 function isSolid(x,y,r=0){
@@ -1614,14 +1691,14 @@ function mpProcessRevives(dt){
 function mpHostStart(members){
  mpStarted=true;mpIsHost=true;mpRoster=members;mpEnemySerial=0;mpShotSerial=0;mpInput={};mpPlayers={};
  selection=(members.find(a=>a.id===mpSelfId)||members[0]).hero;
- newGame();p.downed=false;mpPlayers[mpSelfId]=p;
+ newGame(mpMatchMode);mpSend('restart',{mode:mpMatchMode});p.downed=false;mpPlayers[mpSelfId]=p;
  const offsets=[[0,0],[62,0],[-62,45],[50,72]];
  members.forEach((member,index)=>{if(member.id===mpSelfId)return;const a=mpCreateActor(member.hero,WORLD.w/2+offsets[index%4][0],WORLD.h/2+offsets[index%4][1]);for(let k=0;k<20&&isSolid(a.x,a.y,a.r);k++){a.x=WORLD.w/2+(k%5-2)*58;a.y=WORLD.h/2+(Math.floor(k/5)-2)*52;}mpPlayers[member.id]=a;});
- mpSetMatchUI();mpBroadcast();announce('ONLINE CO-OP STARTED',members.length+' OPERATIVES · 15 WAVES',2.5);
+ mpSetMatchUI();mpBroadcast();announce('ONLINE CO-OP STARTED',members.length+(endlessMode?' OPERATIVES · ENDLESS SURVIVAL':' OPERATIVES · 15 WAVES'),2.5);
 }
 function mpPackActor(a){const result={...a,hero:C.indexOf(a.ch)};delete result.ch;delete result._mpAim;return result}
 function mpBuildSnapshot(){
- return {state,level,wave,cleared,score,kills,combo,remaining:spawnQueue.length,bossRushMode,
+ return {state,level,wave,cleared,score,kills,combo,remaining:spawnQueue.length,bossRushMode,endlessMode,survivalWave,survivalGap,
  players:Object.entries(mpPlayers).map(([id,a])=>({id,...mpPackActor(a)})),
  enemies:enemies.map(e=>{const r={...e};delete r.navTarget;delete r.detour;delete r.stuck;return r}),
  shots:shots.map(s=>({...s})),effects:effects.map(e=>({...e})),
@@ -1631,7 +1708,7 @@ function mpBroadcast(){if(mpStarted&&mpIsHost&&p)mpSend('state',{data:mpBuildSna
 function mpApplySnapshot(snapshot){
  if(!mpStarted||mpIsHost||!snapshot||!Array.isArray(snapshot.players))return;
  const before=state,oldLevel=level,oldCleared=cleared;
- level=snapshot.level;wave=snapshot.wave;cleared=snapshot.cleared;score=snapshot.score||0;kills=snapshot.kills||0;combo=snapshot.combo||0;bossRushMode=!!snapshot.bossRushMode;
+ level=snapshot.level;wave=snapshot.wave;cleared=snapshot.cleared;score=snapshot.score||0;kills=snapshot.kills||0;combo=snapshot.combo||0;bossRushMode=!!snapshot.bossRushMode;endlessMode=!!snapshot.endlessMode;survivalWave=Math.max(1,Number(snapshot.survivalWave)||1);survivalGap=Number(snapshot.survivalGap)||0;
  if(!p||oldLevel!==level)makeBackground();
  const updated={};for(const entry of snapshot.players){let a=mpPlayers[entry.id]||{};const hero=C[entry.hero]||C[0];Object.assign(a,entry,{ch:hero});updated[entry.id]=a;}
  mpPlayers=updated;p=mpPlayers[mpSelfId]||p;
@@ -1639,13 +1716,13 @@ function mpApplySnapshot(snapshot){
  enemies=snapshot.enemies.map(e=>{const old=prev[e.netId];if(old){e.renderX=old.renderX??old.x;e.renderY=old.renderY??old.y;}return e});
  const oldShots=Object.fromEntries(shots.filter(s=>s.netId).map(s=>[s.netId,s]));shots=(snapshot.shots||[]).map(s=>{const o=oldShots[s.netId];if(o){s.renderX=o.renderX??o.x;s.renderY=o.renderY??o.y;}return s;});effects=snapshot.effects||[];floaters=snapshot.floaters||[];sharkDebris=snapshot.sharkDebris||[];
  spawnQueue=Array(Math.min(300,snapshot.remaining||0)).fill(null);
- const next=snapshot.state;if(next!==before){state=next;showScreen(next==='playing'||next==='bossVictory'?'none':next==='shop'?'shop':next==='paused'?'pausePanel':next==='victory'||next==='gameover'?'endPanel':'menu');
+ const next=snapshot.state;if(next!==before){state=next;showScreen(next==='playing'||next==='waveBreak'||next==='bossVictory'?'none':next==='shop'?'shop':next==='paused'?'pausePanel':next==='victory'||next==='gameover'?'endPanel':'menu');
    if(next==='shop'){$('nextWaveBtn').disabled=true;$('nextWaveBtn').textContent='WAITING FOR HOST TO START NEXT WAVE';$('shopTip').textContent='Upgrade your own character. Your host starts the next wave.';mpShopKey='';}
    if(next==='victory'||next==='gameover'){
-     $('endEyebrow').textContent='ONLINE CO-OP · '+mpRoster.length+' OPERATIVES';$('endTitle').textContent=next==='victory'?'CO-OP VICTORY!':'SQUAD ELIMINATED';$('endDescription').textContent=next==='victory'?'Your team survived the invasion!':'All operatives were downed. Try another run!';$('endScore').textContent=score.toLocaleString();$('endKills').textContent=kills.toLocaleString();$('endWaves').textContent=cleared+'/15';$('careerSummary').textContent='Your campaign progress is saved in this browser.';$('againBtn').disabled=true;$('againBtn').textContent='WAIT FOR HOST TO RESTART';
+     $('endEyebrow').textContent='ONLINE CO-OP · '+mpRoster.length+' OPERATIVES';$('endTitle').textContent=endlessMode?'SQUAD REACHED WAVE '+survivalWave:next==='victory'?'CO-OP VICTORY!':'SQUAD ELIMINATED';$('endDescription').textContent=endlessMode?'The squad made it through '+cleared+' waves! Open the leaderboard or post a screenshot.':next==='victory'?'Your team survived the invasion!':'All operatives were downed. Try another run!';$('endScore').textContent=score.toLocaleString();$('endKills').textContent=kills.toLocaleString();$('endWaves').textContent=endlessMode?String(cleared):cleared+'/15';$('careerSummary').textContent=endlessMode?'Survival squad high scores are posted by the host.':'Your campaign progress is saved in this browser.';$('againBtn').disabled=true;$('againBtn').textContent='WAIT FOR HOST TO RESTART';
    }
  }
- if(cleared>oldCleared&&p&&!bossRushMode)recordCampaignProgress(cleared);
+ if(cleared>oldCleared&&p&&!bossRushMode&&!endlessMode)recordCampaignProgress(cleared);
  if(next==='shop'&&p){const key=p.gold+':'+p.hp+':'+JSON.stringify(p.up)+':'+level+':'+wave;if(key!==mpShopKey){mpShopKey=key;renderShop();}}
  if(next==='playing'&&p){hudTick=0;}
  updateBossHud();mpRenderTeam();
@@ -1664,7 +1741,7 @@ function mpHostBuy(id,item){
  mpBroadcast();
 }
 function mpLeave(){
- if(mpRoom)mpSend('leave');mpRoom='';mpStarted=false;mpEnabled=false;mpIsHost=false;mpPlayers={};mpRoster=[];mpInput={};
+ if(mpRoom)mpSend('leave');mpRoom='';mpMatchMode='campaign';mpStarted=false;mpEnabled=false;mpIsHost=false;mpPlayers={};mpRoster=[];mpInput={};
  $('coopTeam').hidden=true;$('coopExit').hidden=true;$('coopOpen').hidden=false;$('coopInRoom').hidden=true;$('coopSetup').hidden=false;$('coopCreate').hidden=false;$('coopJoin').hidden=false;$('coopCode').hidden=false;$('coopPanel').hidden=true;$('nextWaveBtn').disabled=false;$('nextWaveBtn').textContent='LAUNCH NEXT WAVE ▶';mpShopKey='';$('againBtn').disabled=false;$('againBtn').textContent='TRY AGAIN ▶';
  if(state!=='menu'){state='menu';p=null;showScreen('menu');makeHeroes();}
 }
@@ -1684,7 +1761,7 @@ function mpConnect(){
    $('coopSetup').hidden=true;$('coopInRoom').hidden=false;$('coopRoomCode').textContent=mpRoom;mpRenderLobby();return;
   }
   if(m.type==='start'){
-   mpRoster=m.members;mpHostId=m.hostId;mpIsHost=m.hostId===mpSelfId;mpStarted=true;mpEnabled=true;
+   mpMatchMode=m.mode==='endless'?'endless':'campaign';mpRoster=m.members;mpHostId=m.hostId;mpIsHost=m.hostId===mpSelfId;mpStarted=true;mpEnabled=true;
    if(mpIsHost)mpHostStart(m.members);else{mpPlayers={};mpSetMatchUI();mpNotice('Waiting for the host to load the city…');}
    return;
   }
@@ -1692,6 +1769,7 @@ function mpConnect(){
   if(m.type==='buy'&&mpIsHost&&mpStarted){mpHostBuy(m.id,m.item);return;}
   if(m.type==='state'&&!mpIsHost&&mpStarted){mpApplySnapshot(m.data);return;}
   if(m.type==='departed'&&mpIsHost){delete mpPlayers[m.id];delete mpInput[m.id];mpBroadcast();return;}
+  if(m.type==='score_saved'){mpNotice(m.ok?'Survival score posted to leaderboard!':'Score submission failed — keep a screenshot.');return;}
   if(m.type==='closed'){mpNotice(m.reason);mpLeave();$('coopPanel').hidden=false;return;}
  };
  mpSocket.onclose=()=>{if(mpEnabled||mpRoom){mpLeave();$('coopPanel').hidden=false;mpNotice('Connection lost. If Render was sleeping, reload this page and create a new room.');}else mpNotice('Connection failed. Make sure you opened the game through your Render web address or local Node server.');mpSocket=null;};
@@ -1701,14 +1779,14 @@ function mpRenderLobby(){
  const roster=$('coopRoster');roster.replaceChildren();
  for(const member of mpRoster){const line=document.createElement('div');line.className='coopMember';const left=document.createElement('span'),right=document.createElement('small');left.textContent=(member.id===mpHostId?'👑 ':'')+member.name+' — '+C[member.hero].name;right.textContent=member.ready?'✓ READY':'NOT READY';line.append(left,right);roster.append(line);}
  const mine=mpRoster.find(a=>a.id===mpSelfId),isHost=mpHostId===mpSelfId;
- $('coopReady').hidden=isHost;$('coopStart').hidden=!isHost;$('coopReady').textContent=mine&&mine.ready?'UNREADY':'READY UP';$('coopStart').disabled=mpRoster.some(a=>!a.ready);
+ $('coopMode').disabled=!isHost;if(isHost)$('coopMode').value=mpMatchMode;$('coopReady').hidden=isHost;$('coopStart').hidden=!isHost;$('coopReady').textContent=mine&&mine.ready?'UNREADY':'READY UP';$('coopStart').disabled=mpRoster.some(a=>!a.ready);
  $('coopHero').value=String(mine?mine.hero:selection);
  mpNotice(isHost?'Invite friends using the code or link. Everyone needs to ready up before you start.':'Choose your fighter above, then press Ready.');
  $('coopSetup').hidden=false;$('coopInRoom').hidden=false;
  $('coopCreate').hidden=true;$('coopJoin').hidden=true;$('coopCode').hidden=true;
 }
 function mpInitUI(){
- const hero=$('coopHero');C.forEach((c,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=c.name;hero.append(o)});hero.value=String(selection);
+ $('coopMode').onchange=()=>{mpMatchMode=$('coopMode').value==='endless'?'endless':'campaign'};const hero=$('coopHero');C.forEach((c,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=c.name;hero.append(o)});hero.value=String(selection);
  const q=new URLSearchParams(location.search).get('room');if(q)$('coopCode').value=q.trim().slice(0,6).toUpperCase();
  $('coopOpen').onclick=()=>{$('coopPanel').hidden=false;mpConnect()};
  $('coopClose').onclick=()=>{$('coopPanel').hidden=true};
@@ -1716,7 +1794,7 @@ function mpInitUI(){
  $('coopJoin').onclick=()=>{mpConnect();if(!mpSocket||mpSocket.readyState!==WebSocket.OPEN){mpNotice('Connecting. Click Join again when connected.');return;}mpSend('join',{name:$('coopName').value,hero:Number(hero.value),room:$('coopCode').value});};
  hero.onchange=()=>{selection=Number(hero.value);if(mpRoom)mpSend('select',{hero:selection});else makeHeroes();};
  $('coopReady').onclick=()=>{const me=mpRoster.find(a=>a.id===mpSelfId);mpSend('ready',{ready:!(me&&me.ready)});};
- $('coopStart').onclick=()=>mpSend('start');$('coopLeave').onclick=mpLeave;$('coopExit').onclick=()=>{if(confirm('Leave the online match?'))mpLeave()};
+ $('coopStart').onclick=()=>mpSend('start',{mode:$('coopMode').value});$('coopLeave').onclick=mpLeave;$('coopExit').onclick=()=>{if(confirm('Leave the online match?'))mpLeave()};
  $('coopCopy').onclick=()=>{const link=location.origin+'/?room='+mpRoom;navigator.clipboard?.writeText(link).then(()=>mpNotice('Invite link copied!'),()=>mpNotice('Share this link: '+link));};
  const peerInterval=setInterval(()=>{
   if(!mpStarted||mpIsHost||!mpSocket||mpSocket.readyState!==WebSocket.OPEN)return;
@@ -1730,7 +1808,7 @@ function mpInitUI(){
 
 let last=performance.now();function loop(now){let dt=Math.min(.033,(now-last)/1000);last=now;tick(dt);draw();requestAnimationFrame(loop)}requestAnimationFrame(loop);
 // UI actions
-$('startBtn').onclick=()=>{if(mpRoom)mpLeave();newGame()};$('bossRushBtn').onclick=()=>{if(mpRoom)mpLeave();startBossRush()};$('nextWaveBtn').onclick=startWave;$('againBtn').onclick=()=>{if(mpStarted){if(mpIsHost)mpHostStart(mpRoster);return;}newGame()};$('menuFromEnd').onclick=()=>{if(mpRoom)mpLeave();state='menu';p=null;showScreen('menu');makeHeroes()};$('menuFromPause').onclick=()=>{if(mpRoom)mpLeave();state='menu';p=null;showScreen('menu');makeHeroes()};$('btnPause').onclick=togglePause;$('btnSound').onclick=toggleSound;$('resumeBtn').onclick=()=>{if(mpStarted&&!mpIsHost)return;state='playing';showScreen('none')};function togglePause(){if(mpStarted&&!mpIsHost)return;if(state==='playing'){state='paused';attackHeld=false;showScreen('pausePanel')}else if(state==='paused'){state='playing';showScreen('none')}}
+$('startBtn').onclick=()=>newGame('campaign');$('endlessBtn').onclick=()=>{if(mpRoom)mpLeave();newGame('endless')};$('leaderboardBtn').onclick=()=>survivalOpenBoard('menu');$('endScoresBtn').onclick=()=>survivalOpenBoard('endPanel');$('survivalRefresh').onclick=survivalLoadBoard;$('survivalBoardMode').onchange=survivalLoadBoard;$('survivalBoardBack').onclick=()=>{showScreen(survivalBoardReturn);if(mpStarted)mpRenderTeam()};$('survivalBoardPlay').onclick=()=>{if(mpStarted){if(mpIsHost){mpMatchMode='endless';mpHostStart(mpRoster);}else showScreen('endPanel');}else{if(mpRoom)mpLeave();newGame('endless')}};$('bossRushBtn').onclick=()=>{if(mpRoom)mpLeave();startBossRush()};$('nextWaveBtn').onclick=startWave;$('againBtn').onclick=()=>{if(mpStarted){if(mpIsHost)mpHostStart(mpRoster);return;}newGame(endlessMode?'endless':'campaign')};$('menuFromEnd').onclick=()=>{if(mpRoom)mpLeave();state='menu';p=null;showScreen('menu');makeHeroes()};$('menuFromPause').onclick=()=>{if(mpRoom)mpLeave();state='menu';p=null;showScreen('menu');makeHeroes()};$('btnPause').onclick=togglePause;$('btnSound').onclick=toggleSound;$('resumeBtn').onclick=()=>{if(mpStarted&&!mpIsHost)return;state='playing';showScreen('none')};function togglePause(){if(mpStarted&&!mpIsHost)return;if(state==='playing'){state='paused';attackHeld=false;showScreen('pausePanel')}else if(state==='paused'){state='playing';showScreen('none')}}
 window.addEventListener('keydown',e=>{let k=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright',' ','space','enter'].includes(k))e.preventDefault();keys.add(k);if(e.repeat)return;if(k==='p'||k==='escape')togglePause();if(k==='m'){toggleSound();return}if(state!=='playing')return;if(k==='c'){auto=!auto;announce(auto?'AUTO FIRE: ON':'AUTO FIRE: OFF','',.6)}if(k==='e'||k==='k')specials();if(k===' '||k==='shift')dash()});window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));window.addEventListener('blur',()=>{keys.clear();attackHeld=false;joy.x=joy.y=0;if(state==='playing')togglePause()});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());function pointerPos(e){let rect=canvas.getBoundingClientRect();mouse.x=(e.clientX-rect.left)/rect.width*W;mouse.y=(e.clientY-rect.top)/rect.height*H;mouse.moved=true}canvas.addEventListener('pointermove',e=>{if(e.pointerType==='mouse')pointerPos(e)});canvas.addEventListener('pointerenter',e=>{if(e.pointerType==='mouse'&&state==='playing')pointerPos(e)});canvas.addEventListener('pointerdown',e=>{if(state!=='playing')return;if(e.pointerType==='mouse')pointerPos(e);if(e.button===2)specials();else{attackHeld=true;melee()}});window.addEventListener('pointerup',()=>attackHeld=false);
 const stick=$('stick'),knob=$('stickKnob');let activeStick=null;function moveStick(e){let b=stick.getBoundingClientRect(),x=e.clientX-b.left-b.width/2,y=e.clientY-b.top-b.height/2,len=Math.hypot(x,y),m=Math.min(1,len/(b.width*.38));joy.x=len?x/len*m:0;joy.y=len?y/len*m:0;knob.style.transform=`translate(${joy.x*32}px,${joy.y*32}px)`;mouse.moved=false}stick.addEventListener('pointerdown',e=>{activeStick=e.pointerId;stick.setPointerCapture(e.pointerId);moveStick(e)});stick.addEventListener('pointermove',e=>{if(activeStick===e.pointerId)moveStick(e)});function stopStick(e){if(activeStick!==e.pointerId)return;activeStick=null;joy.x=joy.y=0;knob.style.transform='translate(0,0)'}stick.addEventListener('pointerup',stopStick);stick.addEventListener('pointercancel',stopStick);
@@ -1738,6 +1816,7 @@ $('mobileAttack').addEventListener('pointerdown',e=>{e.preventDefault();mouse.mo
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='playing')togglePause()});
 $('sfxVolume').addEventListener('input',e=>{sfxVolume=Number(e.target.value)/100;updateAudioGains();saveAudioSettings();syncAudioUI();});
 $('musicVolume').addEventListener('input',e=>{musicVolume=Number(e.target.value)/100;updateAudioGains();saveAudioSettings();syncAudioUI();});
+try{$('survivalName').value=localStorage.getItem('crown_crisis_survival_name')||'';}catch(_){}$('survivalName').onchange=()=>{try{localStorage.setItem('crown_crisis_survival_name',$('survivalName').value.slice(0,18));}catch(_){}};
 syncAudioUI();
 updateAchievementUI();makeBackground();showScreen('menu');mpInitUI();
 })();
