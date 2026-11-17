@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080c1b">
-<title>CROWN//CRISIS — V37: Ghost Squad Revival Beta</title>
+<title>CROWN//CRISIS — V38: Multiplayer Hitbox & Room Fix</title>
 <style>
 :root{--cyan:#6df7ed;--pink:#ff5ca6;--gold:#ffd46b;--bg:#080c1b;--card:#121b32;--dim:#9aaccc}
 *{box-sizing:border-box}html,body{margin:0;background:#050712;color:#edfaff;font-family:Consolas,'Courier New',monospace;height:100%;overflow:hidden}button{font:inherit;cursor:pointer}#app{height:100dvh;width:100%;display:grid;place-items:center;padding:0;background:radial-gradient(ellipse at center,#152343 0,#050712 72%)}#gameShell{width:min(100vw,calc(100dvh * 16 / 9));height:min(100dvh,calc(100vw * 9 / 16));aspect-ratio:16/9;position:relative;overflow:hidden;border:none;box-shadow:0 0 0 2px #0a1322,0 0 38px #17446555,0 22px 90px #0009;background:#081122}#game{display:block;width:100%;height:100%;image-rendering:pixelated;touch-action:none}#gameShell.combatCursor #game{cursor:none}#scanlines{position:absolute;inset:0;pointer-events:none;opacity:.17;background:repeating-linear-gradient(to bottom,transparent 0px,transparent 3px,#030817 4px)}.hidden{display:none!important}
@@ -979,9 +979,26 @@ function firstShotWallT(ax,ay,bx,by,r){
 }
 // Make physics reflect the drawn alien silhouettes without changing their
 // movement, spawn spacing or contact damage radii.
+function alienSpriteSize(type){return type==='king'?154:type==='t'?119:type==='b'?93:type==='s'?55:type==='c'?76:type==='p'?77:68}
 function shotTargetRadius(e){
  const bonus={g:10,s:8,b:12,p:10,c:10,t:14,king:16};
  return e.r+(bonus[e.type]||8);
+}
+// V38: the alien art is drawn upwards from the ground anchor, whereas older
+// physics only checked a circle around its feet. Project the visible body back
+// into WORLD space and test a continuous capsule, retaining swept projectiles.
+// Bullet artwork is drawn 14 screen pixels above its world coordinate, so the
+// capsule accounts for that offset. The perspective shear must also be undone.
+function alienBodyCapsule(e){
+ const size=alienSpriteSize(e.type);
+ const topDelta=(14-size*.76)/VIEW_TILT, bottomDelta=(14-size*.24)/VIEW_TILT;
+ return {ax:e.x-VIEW_SHEAR*topDelta,ay:e.y+topDelta,
+         bx:e.x-VIEW_SHEAR*bottomDelta,by:e.y+bottomDelta,
+         radius:Math.max(shotTargetRadius(e),size*.36)};
+}
+function alienBodyHitT(ax,ay,bx,by,e,projectileRadius){
+ const c=alienBodyCapsule(e);
+ return segmentCapsuleHitT(ax,ay,bx,by,c.ax,c.ay,c.bx,c.by,c.radius+projectileRadius);
 }
 function shoot(x,y,a,v,dmg,color,r=4,friendly=false,life=3,extras={}){
 if(friendly&&boostActive(p,'damage'))dmg*=1.12;const visualOwner=friendly&&p?p.ch.id:'alien';
@@ -1055,8 +1072,11 @@ for(let s of shots){
    if(e.dead)continue;
    // Broad-phase culling keeps dense Endless waves from doing expensive
    // segment geometry against monsters hundreds of pixels away.
-   const reach=e.type==='shark'?230:e.r+24+s.r;
-   if(e.x<minX-reach||e.x>maxX+reach||e.y<minY-reach||e.y>maxY+reach)continue;
+   const size=e.type==='shark'?0:alienSpriteSize(e.type);
+    const reachX=e.type==='shark'?230:Math.max(shotTargetRadius(e),size*.36)+s.r+16;
+    const reachAbove=e.type==='shark'?230:(size*.76-14)/VIEW_TILT+reachX;
+    const reachBelow=e.type==='shark'?230:reachX+22;
+    if(e.x<minX-reachX||e.x>maxX+reachX||e.y<minY-reachBelow||e.y>maxY+reachAbove)continue;
    if(e.type==='shark'&&e.legs){
     for(const leg of e.legs){
      if(leg.broken)continue;
@@ -1068,7 +1088,7 @@ for(let s of shots){
     const bodyT=segmentCircleHitT(ox,oy,nx,ny,e.x,e.y,e.r*.77+s.r);
     if(bodyT<bestT){bestT=bodyT;bestEnemy=e;bestLeg=null;bestIsBossBody=true;}
    }else{
-    const t=segmentCircleHitT(ox,oy,nx,ny,e.x,e.y,shotTargetRadius(e)+s.r);
+    const t=alienBodyHitT(ox,oy,nx,ny,e,s.r);
     if(t<bestT){bestT=t;bestEnemy=e;bestLeg=null;bestIsBossBody=false;}
    }
   }
@@ -1524,7 +1544,7 @@ if(x<-145||x>W+145||y<-170||y>H+105)return;
 const type=e.type,frames=ALIEN_FRAMES[type]||ALIEN_FRAMES.g;
 const t=time+(e.seed||0)*.033,pace=type==='s'?12:type==='c'?9:type==='g'?7:type==='t'?3.5:5;
 const stride=Math.sin(t*pace),bob=Math.sin(t*pace*2)*(type==='s'?2.7:1.15);
-const size=type==='king'?154:type==='t'?119:type==='b'?93:type==='s'?55:type==='c'?76:type==='p'?77:68;
+const size=alienSpriteSize(type);
 const width=size*.91,lean=Math.sin(t*pace*.58)*.032;
 let sprite=frames[0];
 ctx.save();ctx.imageSmoothingEnabled=false;
@@ -2062,27 +2082,69 @@ function mpHostBuy(id,item){
  const actor=mpPlayers[id],it=SHOP.find(q=>q.id===item);if(state!=='shop'||!canBuy(actor,it))return;upgradeActor(actor,it);mpBroadcast();
 }
 function mpLeave(){
- if(mpRoom)mpSend('leave');if(mpRetryTimer)clearTimeout(mpRetryTimer);mpRetryTimer=null;mpRecovering=false;mpHostOffline=false;mpReconnectAttempts=0;mpNetHide();mpRoom='';mpMatchMode='campaign';mpStarted=false;mpEnabled=false;mpIsHost=false;mpPlayers={};mpRoster=[];mpInput={};
+ if(location.search.includes('room=')){const url=new URL(location.href);url.searchParams.delete('room');history.replaceState(null,'',url.pathname+url.search+url.hash);}
+ if(mpRoom)mpSend('leave');mpPendingLobby=null;mpLobbyRequestInFlight=false;mpLobbyAttempts=0;mpHelloReceived=false;mpClearLobbyTimer();if(mpRetryTimer)clearTimeout(mpRetryTimer);mpRetryTimer=null;mpRecovering=false;mpHostOffline=false;mpReconnectAttempts=0;mpNetHide();mpRoom='';mpMatchMode='campaign';mpStarted=false;mpEnabled=false;mpIsHost=false;mpPlayers={};mpRoster=[];mpInput={};
  const original=$('coopSetup');original.append($('coopMode').closest('label'),$('coopDifficulty').closest('label'));$('coopTeam').hidden=true;$('coopExit').hidden=true;$('coopOpen').hidden=false;$('coopInRoom').hidden=true;$('coopSetup').hidden=false;$('coopCreate').hidden=false;$('coopJoin').hidden=false;$('coopCode').hidden=false;$('coopPanel').hidden=true;$('nextWaveBtn').disabled=false;$('nextWaveBtn').textContent='LAUNCH NEXT WAVE ▶';mpShopKey='';$('againBtn').disabled=false;$('againBtn').textContent='TRY AGAIN ▶';
  if(state!=='menu'){state='menu';p=null;showScreen('menu');makeHeroes();}showGateway();
 }
 function mpNotice(message){$('coopNotice').textContent=String(message||'');}
+// V39: Create / Join is a single action even when Render is still waking up.
+// Queue the room request until the socket HELLO has assigned this client's ID.
+let mpPendingLobby=null,mpLobbyRequestInFlight=false,mpHelloReceived=false,mpLobbyAttempts=0,mpLobbyTimer=null;
+function mpClearLobbyTimer(){if(mpLobbyTimer)clearTimeout(mpLobbyTimer);mpLobbyTimer=null}
+function mpScheduleLobbyRetry(){
+ mpClearLobbyTimer();
+ if(!mpPendingLobby||mpRoom||mpRecovering)return;
+ const delay=Math.min(8000,900*Math.pow(1.7,Math.min(6,mpLobbyAttempts)));
+ mpLobbyTimer=setTimeout(()=>{
+   mpLobbyTimer=null;
+   if(!mpPendingLobby||mpRoom)return;
+   if(mpLobbyAttempts>=12){mpPendingLobby=null;mpLobbyRequestInFlight=false;mpNotice('Room connection failed after several tries. Check that everyone is using the same Render address, then retry.');return;}
+   mpLobbyRequestInFlight=false;
+   mpLobbyAttempts++;
+   mpNotice('Connecting to the same room… attempt '+(mpLobbyAttempts+1)+'/13');
+   mpConnect();mpFlushLobbyRequest();
+   if(mpPendingLobby&&!mpLobbyTimer)mpScheduleLobbyRetry();
+ },delay);
+}
+
+function mpFlushLobbyRequest(){
+ if(!mpPendingLobby||mpLobbyRequestInFlight||mpRoom||mpRecovering||!mpHelloReceived||!mpSocket||mpSocket.readyState!==WebSocket.OPEN)return;
+ const request=mpPendingLobby;mpLobbyRequestInFlight=true;
+ mpSend(request.type,request.data);
+ mpScheduleLobbyRetry();
+ mpNotice((request.type==='join'?'Joining room ':'Creating room… ')+(request.type==='join'?request.data.room:''));
+}
+function mpRequestLobby(type,data){
+ if(mpRoom){mpNotice('Already in a room. Leave it before creating or joining another.');return;}
+ if(mpLobbyRequestInFlight){mpNotice('Room request sent. Waiting for the server…');return;}
+ if(type==='join'){
+  data.room=String(data.room||'').trim().toUpperCase();
+  if(!/^[A-Z0-9]{6}$/.test(data.room)){mpNotice('Enter a valid six-character room code.');return;}
+ }
+ mpClearLobbyTimer();mpLobbyAttempts=0;mpPendingLobby={type,data};mpNotice(type==='join'?'Connecting to join '+data.room+'…':'Connecting to create a room…');
+ mpConnect();mpFlushLobbyRequest();
+ if(!mpLobbyTimer)mpScheduleLobbyRetry();
+}
 function mpConnect(){
  if(mpSocket&&(mpSocket.readyState===WebSocket.OPEN||mpSocket.readyState===WebSocket.CONNECTING))return;
  const socket=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
+ const connectionWatchdog=setTimeout(()=>{if(mpSocket===socket&&socket.readyState===WebSocket.CONNECTING){console.warn('[CROWN//CRISIS] websocket handshake timeout');socket.close();}},14000);
+ mpHelloReceived=false;
  mpSocket=socket;
- socket.onopen=()=>{mpLastPong=Date.now();mpOpenedAt=Date.now();if(mpRecovering&&mpRoom){mpNetShow('CONNECTION RESTORED — REJOINING YOUR SQUAD…');mpSend('resume',{room:mpRoom,token:mpSessionToken});}else mpNotice('Connected. Create a room or join a friend.');};
+ socket.onopen=()=>{clearTimeout(connectionWatchdog);mpLastPong=Date.now();mpOpenedAt=Date.now();if(mpRecovering&&mpRoom){mpNetShow('CONNECTION RESTORED — REJOINING YOUR SQUAD…');mpSend('resume',{room:mpRoom,token:mpSessionToken});}else mpNotice('Connected. Create a room or join a friend.');};
  mpSocket.onmessage=event=>{
   if(typeof event.data==='string')mpInboundBytes+=event.data.length;
   const now=performance.now();if(now-mpMeterStart>=1500){mpKbps=mpInboundBytes/(1024*((now-mpMeterStart)/1000));mpInboundBytes=0;mpMeterStart=now;}
   let m;try{m=JSON.parse(event.data)}catch{return}
-  if(m.type==='hello'){if(!mpRecovering)mpSelfId=m.id;return;}
+  if(m.type==='hello'){if(!mpRecovering){mpSelfId=m.id;mpHelloReceived=true;mpFlushLobbyRequest();}return;}
   if(m.type==='pong'){mpLastPong=Date.now();if(m.echo)mpRttMs=Math.max(0,Math.round((Date.now()-m.echo)));return;}
   if(m.type==='resume_failed'){
    mpRecovering=false;mpNetShow('RECONNECTION EXPIRED — YOUR OLD ROOM IS NO LONGER AVAILABLE.');
    mpLeave();$('coopPanel').hidden=false;mpNotice(m.reason+' Create or join a new room.');return;
   }
   if(m.type==='resumed'){
+   mpLobbyRequestInFlight=false;mpPendingLobby=null;mpClearLobbyTimer();
    mpSelfId=m.id;mpHostId=m.hostId;mpRoom=m.room;mpRoster=m.members;mpIsHost=m.hostId===m.id;
    if(DIFFICULTIES[m.difficulty])difficulty=m.difficulty;if(m.matchMode)mpMatchMode=m.matchMode;
    mpEnabled=true;mpRecovering=false;mpHostOffline=!mpIsHost&&m.members.find(a=>a.id===m.hostId)?.connected===false;
@@ -2099,9 +2161,10 @@ function mpConnect(){
   }
   if(m.type==='host_resumed'){mpHostOffline=false;if(!mpRecovering)mpNetHide();return;}
   if(m.type==='resync_request'&&mpIsHost&&mpStarted){mpBroadcast();return;}
-  if(m.type==='error'){mpNotice(m.message);return;}
+  if(m.type==='error'){mpLobbyRequestInFlight=false;mpPendingLobby=null;mpClearLobbyTimer();mpNotice(m.message);return;}
   if(m.type==='left')return;
   if(m.type==='roster'){
+   mpLobbyRequestInFlight=false;mpPendingLobby=null;mpClearLobbyTimer();
    if(DIFFICULTIES[m.difficulty])difficulty=m.difficulty;if(m.matchMode)mpMatchMode=m.matchMode;
    mpRoom=m.room;mpEnabled=true;mpHostId=m.hostId;mpIsHost=m.hostId===mpSelfId;mpRoster=m.members;
    const me=m.members.find(a=>a.id===mpSelfId);if(me&&selection!==me.hero){selection=me.hero;makeHeroes();}
@@ -2120,6 +2183,7 @@ function mpConnect(){
   if(m.type==='closed'){const reason=m.reason;mpLeave();$('coopPanel').hidden=false;mpNotice(reason);return;}
  };
  socket.onclose=(ev)=>{
+  clearTimeout(connectionWatchdog);
   if(mpSocket!==socket)return;
   const age=Date.now()-mpOpenedAt;
   mpLastCloseCode=Number(ev?.code)||1006;
@@ -2128,8 +2192,14 @@ function mpConnect(){
   // Only reset the retry backoff after a genuinely stable connection. Previously
   // each 1-second resume reset it, creating the rapid Render-log reconnect loop.
   if(age>30000)mpReconnectAttempts=0;
-  mpSocket=null;
-  if(mpEnabled&&mpRoom){
+  mpSocket=null;mpHelloReceived=false;
+   if(mpPendingLobby&&!mpRoom){
+     mpLobbyRequestInFlight=false;
+     mpNotice('The connection dropped while joining. Retrying the invite without losing your request…');
+     if(!mpLobbyTimer)mpScheduleLobbyRetry();
+     return;
+   }
+   if(mpEnabled&&mpRoom){
     mpRecovering=true;
     mpNetShow('CONNECTION LOST (CODE '+mpLastCloseCode+') — RETRYING. KEEP THIS TAB OPEN.');
     mpScheduleReconnect();
@@ -2140,7 +2210,7 @@ function mpConnect(){
 function mpRenderFighters(){const hero=$('coopHero'),box=$('coopFighters');box.replaceChildren();const taken=new Set(mpRoster.filter(m=>m.id!==mpSelfId).map(m=>m.hero));C.forEach((ch,i)=>{const b=document.createElement('button');b.type='button';b.textContent=ch.name;b.className=i===Number(hero.value)?'selected':'';b.disabled=taken.has(i);b.onclick=()=>{hero.value=String(i);hero.onchange()};box.append(b)})}
 function mpRenderLobby(){
  const roster=$('coopRoster');roster.replaceChildren();
- for(const member of mpRoster){const line=document.createElement('div');line.className='coopMember';const left=document.createElement('span'),right=document.createElement('small');left.textContent=(member.id===mpHostId?'👑 ':'')+member.name+' — '+C[member.hero].name;right.textContent=member.ready?'✓ READY':'NOT READY';line.append(left,right);roster.append(line);}
+ for(const member of mpRoster){const line=document.createElement('div');line.className='coopMember';const left=document.createElement('span'),right=document.createElement('small');left.textContent=(member.id===mpHostId?'👑 ':'')+member.name+' — '+C[member.hero].name;right.textContent=member.connected===false?'RECONNECTING':(member.ready?'✓ READY':'NOT READY');line.append(left,right);roster.append(line);}
  const mine=mpRoster.find(a=>a.id===mpSelfId),isHost=mpHostId===mpSelfId;
  $('coopMode').disabled=!isHost;$('coopDifficulty').disabled=!isHost;if(isHost){$('coopMode').value=mpMatchMode;$('coopDifficulty').value=difficulty;}$('coopReady').hidden=isHost;$('coopStart').hidden=!isHost;$('coopReady').textContent=mine&&mine.ready?'UNREADY':'READY UP';$('coopStart').disabled=mpRoster.some(a=>!a.ready);$('coopStart').textContent=mpMatchMode==='endless'?'START ENDLESS CO-OP ▶':'START 15-WAVE CO-OP ▶';
  $('coopHero').value=String(mine?mine.hero:selection);mpRenderFighters();const settings=$('coopHostSettings');if(settings){settings.hidden=!isHost;settings.append($('coopMode').closest('label'),$('coopDifficulty').closest('label'));}
@@ -2150,16 +2220,22 @@ function mpRenderLobby(){
 }
 function mpInitUI(){
  $('coopMode').onchange=()=>{mpMatchMode=$('coopMode').value==='endless'?'endless':'campaign';if(mpRoom&&mpIsHost)mpSend('settings',{mode:mpMatchMode,difficulty:$('coopDifficulty').value})};$('coopDifficulty').onchange=()=>{if(mpRoom&&mpIsHost)mpSend('settings',{mode:$('coopMode').value,difficulty:$('coopDifficulty').value})};const hero=$('coopHero');C.forEach((c,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=c.name;hero.append(o)});hero.value=String(selection);
- const q=new URLSearchParams(location.search).get('room');if(q)$('coopCode').value=q.trim().slice(0,6).toUpperCase();
+ const q=new URLSearchParams(location.search).get('room');const invitedCode=q&&q.trim().toUpperCase();if(invitedCode&&/^[A-Z0-9]{6}$/.test(invitedCode))$('coopCode').value=invitedCode;
  $('coopOpen').onclick=chooseMulti;
  $('coopClose').onclick=()=>{$('coopPanel').hidden=true;if(!mpStarted)showGateway()};
- $('coopCreate').onclick=()=>{mpConnect();if(!mpSocket||mpSocket.readyState!==WebSocket.OPEN){mpNotice('Connecting. Click Create again when connected.');return;}mpSend('create',{name:$('coopName').value,hero:Number(hero.value),token:mpSessionToken});};
- $('coopJoin').onclick=()=>{mpConnect();if(!mpSocket||mpSocket.readyState!==WebSocket.OPEN){mpNotice('Connecting. Click Join again when connected.');return;}mpSend('join',{name:$('coopName').value,hero:Number(hero.value),room:$('coopCode').value,token:mpSessionToken});};
+ $('coopCreate').onclick=()=>mpRequestLobby('create',{name:$('coopName').value,hero:Number(hero.value),token:mpSessionToken});
+ $('coopJoin').onclick=()=>mpRequestLobby('join',{name:$('coopName').value,hero:Number(hero.value),room:$('coopCode').value,token:mpSessionToken});
  hero.onchange=()=>{selection=Number(hero.value);if(mpRoom)mpSend('select',{hero:selection});else makeHeroes();mpRenderFighters();};
  
  $('coopReady').onclick=()=>{const me=mpRoster.find(a=>a.id===mpSelfId);mpSend('ready',{ready:!(me&&me.ready)});};
  $('coopStart').onclick=()=>mpSend('start',{mode:$('coopMode').value,difficulty:$('coopDifficulty').value});$('coopLeave').onclick=mpLeave;$('coopExit').onclick=()=>{if(confirm('Leave the online match?'))mpLeave()};
- $('coopCopy').onclick=()=>{const link=location.origin+'/?room='+mpRoom;navigator.clipboard?.writeText(link).then(()=>mpNotice('Invite link copied!'),()=>mpNotice('Share this link: '+link));};
+ $('coopCopy').onclick=()=>{const link=location.origin+'/?room='+encodeURIComponent(mpRoom);navigator.clipboard?.writeText(link).then(()=>mpNotice('Invite link copied! Be sure friends use this exact website address: '+location.host),()=>mpNotice('Share this exact link: '+link));};
+  if(invitedCode&&/^[A-Z0-9]{6}$/.test(invitedCode)){
+    // Joining an invite requires no second button click. Room settings and the
+    // full character picker become available once the server confirms the join.
+    mpNotice('Opening invite '+invitedCode+' on '+location.host+'…');
+    mpRequestLobby('join',{name:$('coopName').value||'Operative',hero:Number(hero.value),room:invitedCode,token:mpSessionToken});
+  }
  const peerInterval=setInterval(()=>{
   if(!mpStarted||mpIsHost||!mpSocket||mpSocket.readyState!==WebSocket.OPEN)return;
   const mx=(keys.has('d')||keys.has('arrowright')?1:0)-(keys.has('a')||keys.has('arrowleft')?1:0)+joy.x;
