@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080c1b">
-<title>CROWN//CRISIS — V33: Rare Powerups Beta</title>
+<title>CROWN//CRISIS — V37: Ghost Squad Revival Beta</title>
 <style>
 :root{--cyan:#6df7ed;--pink:#ff5ca6;--gold:#ffd46b;--bg:#080c1b;--card:#121b32;--dim:#9aaccc}
 *{box-sizing:border-box}html,body{margin:0;background:#050712;color:#edfaff;font-family:Consolas,'Courier New',monospace;height:100%;overflow:hidden}button{font:inherit;cursor:pointer}#app{height:100dvh;width:100%;display:grid;place-items:center;padding:0;background:radial-gradient(ellipse at center,#152343 0,#050712 72%)}#gameShell{width:min(100vw,calc(100dvh * 16 / 9));height:min(100dvh,calc(100vw * 9 / 16));aspect-ratio:16/9;position:relative;overflow:hidden;border:none;box-shadow:0 0 0 2px #0a1322,0 0 38px #17446555,0 22px 90px #0009;background:#081122}#game{display:block;width:100%;height:100%;image-rendering:pixelated;touch-action:none}#gameShell.combatCursor #game{cursor:none}#scanlines{position:absolute;inset:0;pointer-events:none;opacity:.17;background:repeating-linear-gradient(to bottom,transparent 0px,transparent 3px,#030817 4px)}.hidden{display:none!important}
@@ -164,7 +164,33 @@
  .survivalScoreRow{display:grid;grid-template-columns:36px minmax(100px,1fr) 85px 98px;gap:7px;padding:10px 12px;border-bottom:1px solid #344258;align-items:center;font:900 12px monospace}
  .survivalScoreRow:nth-child(odd){background:#22304455}.survivalScoreRow b{color:#fce098}.survivalScoreRow small{color:#95ccd9;font:10px monospace}
  @media(max-width:750px){#menu .menuEndless,#menu .menuScores{font-size:7px;padding:5px;right:1%}.survivalScoreRow{font-size:10px;grid-template-columns:25px minmax(70px,1fr) 56px 72px;padding:8px 4px}#leaderboardPanel{padding:14px}}
- </style> </head> <body>
+ </style> 
+<style id="v37GhostHUD">
+/* Team information shares the same arcade HUD as the player health and coins. */
+#hudleft{width:clamp(190px,26vw,267px);padding:10px 12px;border-left:4px solid #69e9ed;box-shadow:0 5px 24px #000b,0 0 17px #46eff31c}
+#heroName{font-size:clamp(10px,1.1vw,14px)}
+#hpBar{position:relative;height:20px;border:2px solid #e9f8ff;background:#371d35;box-shadow:0 0 14px #ff527c7a,inset 0 0 7px #05030a;margin-top:8px}
+#hpFill{height:100%;background:linear-gradient(90deg,#37db94,#a6ffba);box-shadow:0 0 12px #8dffc8;transition:width .15s linear,background .2s}
+#hpText{font-weight:900;font-size:clamp(9px,.95vw,12px);color:#ffffff;letter-spacing:.1px;text-shadow:0 0 7px #64f4f4}
+#shieldBar{height:6px;background:#0d2335;border-color:#73c9e4}
+#hudleft #coopTeam{position:relative;inset:auto!important;top:auto!important;left:auto!important;z-index:auto;margin:10px -3px -3px;padding:9px 5px 3px;border:0;border-top:2px solid #52bacc;border-radius:0;background:linear-gradient(180deg,#0f233899,transparent);max-width:none;width:auto;line-height:1.2;color:#e9f9ff;pointer-events:none}
+#coopTeam[hidden]{display:none!important}
+.coopHeaderLine{font-size:10px;font-weight:900;color:#80fcde;letter-spacing:.4px;margin-bottom:6px;line-height:1.3}
+.coopMember{padding:4px 3px 6px;margin-bottom:3px;border-left:3px solid #5a8da6;background:#111e39b5;border-radius:2px}
+.coopMember.self{border-left-color:#ffe098;background:#263146c9}
+.coopMember.ghost{border-left-color:#9cddff;background:#243d5e9a}
+.coopMember .memberTop{display:flex;justify-content:space-between;align-items:center;gap:4px;font-size:10px;font-weight:900;white-space:nowrap}
+.coopMember .memberName{overflow:hidden;text-overflow:ellipsis}
+.coopMember .memberHP{flex-shrink:0;color:#ceffe5}
+.coopMember.ghost .memberHP{color:#b9ecff}
+.coopMember .memberBar{height:8px;background:#2d263f;border:1px solid #5f7e97;margin-top:4px;overflow:hidden}
+.coopMember .memberFill{height:100%;background:linear-gradient(90deg,#ffcf6c,#7affbf)}
+.coopMember.ghost .memberFill{background:#77b8e2}
+.coopHint{font-size:9px;color:#a9cfe0;margin-top:6px;line-height:1.3}
+@media(max-width:780px){#hudleft{width:174px;padding:6px 7px}#hpBar{height:15px}#hpText{font-size:8px}.coopHeaderLine,.coopMember .memberTop{font-size:8px}.coopMember{padding:3px 2px}.coopMember .memberBar{height:6px}.coopHint{font-size:8px}#hudleft #coopTeam{margin-top:5px;padding-top:5px}}
+@media(max-width:510px){#hudleft{width:148px;padding:5px}#hudleft #coopTeam{max-height:150px;overflow:hidden}.coopMember .memberTop{font-size:7px}.coopHint{display:none}#hpBar{height:14px}#hpText{font-size:7px}}
+</style>
+</head> <body>
 <div id="app"><div id="gameShell">
 <canvas id="game" width="960" height="540" aria-label="Angled overhead pixel-art cyberpunk alien shooter"></canvas>
 <div id="scanlines"></div>
@@ -701,9 +727,27 @@ function upgradeActor(actor,it){if(!canBuy(actor,it))return false;const cost=pri
  return true;}
 function upgradeTitle(it,owned){return it.id==='blade'?(owned<6?'UNLOCK '+WEAPON_NAMES[Math.min(6,owned+1)]:'WEAPON OVERCHARGE +1'):it.name}
 function buy(id){if(mpStarted&&!mpIsHost){if(state==='shop')mpSend('buy',{item:id});return;}if(state!=='shop')return;const it=SHOP.find(q=>q.id===id);if(!canBuy(p,it)){$('shopTip').textContent='Not enough gold, full health, or your one campaign purchase is already used.';return;}upgradeActor(p,it);sound('buy');$('shopTip').textContent=endlessMode?'ENDLESS UPGRADE APPLIED — bonuses become smaller at higher ranks.':'UPGRADE PURCHASED · Campaign shop slots are limited.';renderShop();updateHud()}
-function renderShop(){const grid=$('shopGrid');grid.innerHTML='';SHOP.forEach(it=>{const owned=p.up[it.id],max=!endlessMode&&owned>=it.max,cost=price(it),afford=canBuy(p,it);let b=document.createElement('button');b.className='shopItem'+(afford?' afford':'');b.disabled=!afford;b.innerHTML=`<span class="shopIcon">${it.icon}</span><strong>${upgradeTitle(it,owned)}</strong><small>${it.desc}</small><span class="shopPrice">${max?'MAXED':!endlessMode&&(p.shopBuys||0)>=(difficulty==='insanity'?3:1)?'SHOP LIMIT':'◈ '+cost}</span><span class="shopOwned">${it.id==='heal'?'':owned+(endlessMode?' · ∞':' / '+it.max)}</span>`;b.onclick=()=>buy(it.id);grid.appendChild(b)});$('shopGold').textContent='◈ '+p.gold;const next=LEVELS[level];$('shopSummary').textContent=endlessMode?`♾ WAVE ${cleared} CLEARED · NEXT: ${survivalWave} · SHOP EVERY ${difficulty==='insanity'?5:3} WAVES · UNLIMITED RANKS`:`WAVE ${cleared} CLEARED · NEXT: DISTRICT ${level+1}/5 · ${next.name} · ${difficulty.toUpperCase()} · ${difficulty==='insanity'?'THREE PURCHASES PER SHOP':'ONE PURCHASE PER SHOP'}`;}
-function openShop(){state='shop';shots=[];powerPickups=[];p.shopBuys=0;p.hp=Math.min(p.maxHp,p.hp+6);
-if(mpStarted&&mpIsHost)for(const actor of Object.values(mpPlayers))if(actor!==p){actor.shopBuys=0;if(actor.downed){actor.downed=false;actor.hp=Math.max(30,Math.round(actor.maxHp*.4));}actor.hp=Math.min(actor.maxHp,actor.hp+8);if(wave===0&&cleared>0){actor.hp=Math.min(actor.maxHp,actor.hp+30);actor.x=WORLD.w/2+50;actor.y=WORLD.h/2+40;}}if(wave===0&&cleared>0){p.hp=Math.min(p.maxHp,p.hp+30);p.x=WORLD.w/2;p.y=WORLD.h/2;navRefresh=0;}$('shopTip').textContent=endlessMode?'ENDLESS SURVIVAL: Recover, upgrade, and fight. Every wave is tougher. Bosses return every 25 waves.':(level===4&&wave===2)?'⚠ FINAL BOSS INCOMING: Mossad Destroyer Shark. Target each of the 8 glowing leg joints — the central face is invulnerable!':'Spend your gold! Guns, armor, jet boots, rocket launchers, drones and shields all change the on-screen action.';renderShop();showScreen('shop');}
+function renderShop(){const grid=$('shopGrid');grid.innerHTML='';SHOP.forEach(it=>{const owned=p.up[it.id],max=!endlessMode&&owned>=it.max,cost=price(it),afford=canBuy(p,it);let b=document.createElement('button');b.className='shopItem'+(afford?' afford':'');b.disabled=!afford;b.innerHTML=`<span class="shopIcon">${it.icon}</span><strong>${upgradeTitle(it,owned)}</strong><small>${it.desc}</small><span class="shopPrice">${max?'MAXED':!endlessMode&&(p.shopBuys||0)>=(difficulty==='insanity'?3:1)?'SHOP LIMIT':'◈ '+cost}</span><span class="shopOwned">${it.id==='heal'?'':owned+(endlessMode?' · ∞':' / '+it.max)}</span>`;b.onclick=()=>buy(it.id);grid.appendChild(b)});$('shopGold').textContent='◈ '+p.gold;const next=LEVELS[level];$('shopSummary').textContent=endlessMode?`♾ WAVE ${cleared} CLEARED · NEXT: ${survivalWave} · SHOP EVERY ${difficulty==='insanity'?5:2} WAVES · UNLIMITED RANKS`:`WAVE ${cleared} CLEARED · NEXT: DISTRICT ${level+1}/5 · ${next.name} · ${difficulty.toUpperCase()} · ${difficulty==='insanity'?'THREE PURCHASES PER SHOP':'ONE PURCHASE PER SHOP'}`;}
+
+// V37: all surviving waves return downed operatives to the fight, including
+// non-shop transitions and the host fighter. A whole-team wipe still loses.
+function mpAutoReviveWave(){
+ if(!mpStarted||!mpIsHost)return 0;
+ let restored=0;
+ for(const actor of Object.values(mpPlayers)){
+  if(!actor||!actor.downed)continue;
+  actor.downed=false;actor.reviveProgress=0;
+  actor.hp=Math.max(30,Math.round(actor.maxHp*.42));
+  actor.inv=2.2;
+  actor.moving=0;actor.muzzle=0;restored++;
+  emit(actor.x,actor.y,'#a6fbff',24,90);
+  textFly(actor.x,actor.y-28,'WAVE CLEAR · REBORN','#b9fff5',15);
+ }
+ if(restored)announce('GHOSTS RETURNED',restored+' OPERATIVE'+(restored===1?'':'S')+' REVIVED FOR FREE',2.1);
+ return restored;
+}
+function openShop(){if(mpStarted&&mpIsHost)mpAutoReviveWave();state='shop';shots=[];powerPickups=[];p.shopBuys=0;p.hp=Math.min(p.maxHp,p.hp+6);
+if(mpStarted&&mpIsHost)for(const actor of Object.values(mpPlayers))if(actor!==p){actor.shopBuys=0;actor.hp=Math.min(actor.maxHp,actor.hp+8);if(wave===0&&cleared>0){actor.hp=Math.min(actor.maxHp,actor.hp+30);actor.x=WORLD.w/2+50;actor.y=WORLD.h/2+40;}}if(wave===0&&cleared>0){p.hp=Math.min(p.maxHp,p.hp+30);p.x=WORLD.w/2;p.y=WORLD.h/2;navRefresh=0;}$('shopTip').textContent=endlessMode?'ENDLESS SURVIVAL: Recover, upgrade, and fight. Every wave is tougher. Bosses return every 25 waves.':(level===4&&wave===2)?'⚠ FINAL BOSS INCOMING: Mossad Destroyer Shark. Target each of the 8 glowing leg joints — the central face is invulnerable!':'Spend your gold! Guns, armor, jet boots, rocket launchers, drones and shields all change the on-screen action.';renderShop();showScreen('shop');}
 function startWave(){state='playing';showScreen('none');enemies=[];shots=[];powerPickups=[];spawnQueue=[];let spec=endlessMode?survivalSpec(survivalWave):LEVELS[level].waves[wave];
 // More monsters with a gradual ramp, keeping singular bosses singular.
 const hordeScale=(endlessMode?1:(1.50+level*.035+wave*.025))*diffRules().count*(mpStarted&&mpIsHost?1+.42*(mpActiveCount()-1):1);
@@ -716,7 +760,8 @@ function getAim(){if(mpStarted&&mpIsHost&&p&&Number.isFinite(p._mpAim))return p.
 function nearest(x,y,range=99999){let best=null,d=range*range;for(let e of enemies){if(e.dead)continue;let q=(e.x-x)**2+(e.y-y)**2;if(q<d){d=q;best=e}}return best}
 function spawnEnemy(type){
  let t=TYPES[type];if(!t)return;
- let x=p.x,y=p.y,clear=t.r+4;
+ const living=mpStarted&&mpIsHost?mpLiving():[],anchor=living.length?living[spawnSerial%living.length]:p;
+ let x=anchor.x,y=anchor.y,clear=t.r+4;
  // A rotating ring of entry sectors distributes packs on all sides of the player.
  // Each attempt tests real collision against buildings and solid street obstacles.
  spawnSerial++; // Random angles instead of a repeating sixteen-sector spawn pattern.
@@ -724,29 +769,29 @@ function spawnEnemy(type){
  for(let attempt=0;attempt<90;attempt++){
    const a=R(-Math.PI,Math.PI);
    const radius=R(355,800);
-   const xx=p.x+Math.cos(a)*radius,yy=p.y+Math.sin(a)*radius;
+   const xx=anchor.x+Math.cos(a)*radius,yy=anchor.y+Math.sin(a)*radius;
    if(xx<clear+3||xx>WORLD.w-clear-3||yy<clear+3||yy>WORLD.h-clear-3)continue;
-   if(isSolid(xx,yy,clear)||dist(xx,yy,p.x,p.y)<330)continue;
+   if(isSolid(xx,yy,clear)||dist(xx,yy,anchor.x,anchor.y)<330)continue;
    let nearestGap=Infinity;
    for(const other of enemies){if(other.dead)continue;let gap=dist(xx,yy,other.x,other.y)-(t.r+other.r);if(gap<nearestGap)nearestGap=gap}
    if(nearestGap>=90){x=xx;y=yy;best=null;break}
-   const score=Math.min(nearestGap,140)+dist(xx,yy,p.x,p.y)*.035;
+   const score=Math.min(nearestGap,140)+dist(xx,yy,anchor.x,anchor.y)*.035;
    if(score>bestScore){bestScore=score;best=[xx,yy]}
  }
  if(best){[x,y]=best}
- if(x===p.x&&y===p.y){
+ if(x===anchor.x&&y===anchor.y){
    let far=-Infinity;
    for(let attempt=0;attempt<150;attempt++){
      const xx=R(clear+4,WORLD.w-clear-4),yy=R(clear+4,WORLD.h-clear-4);
-     if(isSolid(xx,yy,clear)||dist(xx,yy,p.x,p.y)<320)continue;
-     let gap=Math.min(dist(xx,yy,p.x,p.y),760);
+     if(isSolid(xx,yy,clear)||dist(xx,yy,anchor.x,anchor.y)<320)continue;
+     let gap=Math.min(dist(xx,yy,anchor.x,anchor.y),760);
      for(const other of enemies)if(!other.dead)gap=Math.min(gap,dist(xx,yy,other.x,other.y));
      if(gap>far){far=gap;x=xx;y=yy}
    }
  }
  if(type==='shark'){
    const candidates=[[1490,720],[870,720],[1180,390],[1180,1050]];
-   const placed=candidates.find(q=>dist(q[0],q[1],p.x,p.y)>250&&!isSolid(q[0],q[1],t.r+10));
+   const placed=candidates.find(q=>dist(q[0],q[1],anchor.x,anchor.y)>250&&!isSolid(q[0],q[1],t.r+10));
    if(placed){x=placed[0];y=placed[1]}
  }
  const elite=(type!=='shark'&&type!=='king')&&rand()<(endlessMode?Math.min(.49,.10+survivalWave*.00074):(.09+level*.012))*(difficulty==='insanity'?1.5:difficulty==='hard'?1.2:1);
@@ -768,7 +813,7 @@ function sharkShotLeg(e,x0,y0,x1,y1,r){let hit=null,best=1e9;for(const leg of e.
 function sharkHitLeg(e,leg,amount,crit=false){if(e.dead||!leg||leg.broken)return;leg.hp=Math.max(0,leg.hp-amount);leg.flash=.18;e.flash=.08;e.hp=e.legs.reduce((sum,k)=>sum+k.hp,0);const g=sharkLegGeometry(e,leg);emit(g.bx,g.by,crit?'#fff5b5':'#ff5c9d',crit?10:5,85);
  if(crit)textFly(g.bx,g.by-12,'CRIT '+Math.round(amount),'#fff4af',15);
  else if(Math.random()<.4)textFly(g.bx,g.by-12,'-'+Math.round(amount),'#ffc2da',11);
- if(leg.hp<=0){leg.broken=true;leg.hp=0;let left=e.legs.filter(k=>!k.broken).length;sharkDebris.push({x:g.bx,y:g.by,a:g.a,life:2,maxLife:2,vx:Math.cos(g.a)*90,vy:Math.sin(g.a)*90,i:leg.i});effects.push({kind:'nova',x:g.bx,y:g.by,r:3,max:115,color:'#ff5c9d',life:.55,maxLife:.55});emit(g.bx,g.by,'#ffce86',25,200);shake=Math.max(shake,3.1);sound('boss');textFly(g.cx,g.cy-16,'LEG '+(leg.i+1)+' DESTROYED!','#ffd37d',17);announce(left?('LEG '+(leg.i+1)+' DESTROYED'):('ALL EIGHT LEGS DESTROYED'),left?(left+' TARGETS REMAIN'):'MOSSAD DESTROYER SHARK HAS FALLEN!',1.25);if(left===0){killEnemy(e);if(!endlessMode){cleared=15;recordCampaignProgress(15);state='bossVictory';bossVictoryTimer=2.3;attackHeld=false;}}}
+ if(leg.hp<=0){leg.broken=true;leg.hp=0;let left=e.legs.filter(k=>!k.broken).length;sharkDebris.push({x:g.bx,y:g.by,a:g.a,life:2,maxLife:2,vx:Math.cos(g.a)*90,vy:Math.sin(g.a)*90,i:leg.i});effects.push({kind:'nova',x:g.bx,y:g.by,r:3,max:115,color:'#ff5c9d',life:.55,maxLife:.55});emit(g.bx,g.by,'#ffce86',25,200);shake=Math.max(shake,3.1);sound('boss');textFly(g.cx,g.cy-16,'LEG '+(leg.i+1)+' DESTROYED!','#ffd37d',17);announce(left?('LEG '+(leg.i+1)+' DESTROYED'):('ALL EIGHT LEGS DESTROYED'),left?(left+' TARGETS REMAIN'):'MOSSAD DESTROYER SHARK HAS FALLEN!',1.25);if(left===0){killEnemy(e);if(!endlessMode){cleared=15;if(mpStarted&&mpIsHost)mpAutoReviveWave();recordCampaignProgress(15);state='bossVictory';bossVictoryTimer=2.3;attackHeld=false;}}}
  updateBossHud();}
 function sharkAOETarget(e,fromx=p.x,fromy=p.y){return e.legs.filter(k=>!k.broken).sort((a,b)=>{let u=sharkLegGeometry(e,a),v=sharkLegGeometry(e,b);return dist(fromx,fromy,u.bx,u.by)-dist(fromx,fromy,v.bx,v.by)})[0]}
 function updateBossHud(){let e=enemies.find(q=>q.type==='shark'&&!q.dead);let box=$('bossHUD');if(!e){box.classList.add('hidden');return}box.classList.remove('hidden');let left=e.legs.filter(k=>!k.broken).length;$('bossCount').textContent=left+' / 8 LEGS REMAIN';$('legBars').innerHTML=e.legs.map(k=>`<div class="legBar ${k.broken?'broken':''}" title="Leg ${k.i+1}: ${Math.ceil(k.hp)} HP"><div class="legFill" style="transform:scaleX(${k.hp/k.maxHp})"></div><span>${k.broken?'✕':k.i+1}</span></div>`).join('')}
@@ -944,11 +989,11 @@ const visualTier=friendly&&p?p.up.blade:0;
 shots.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,dmg,color,r,friendly,life,ric:0,chain:0,crit:0,homing:false,
  owner:visualOwner,visualTier,specialShot:false,createdAt:time,netId:mpStarted&&mpIsHost?++mpShotSerial:0,...extras});
 }
-function damagePlayer(amount){if(p.inv>0)return;let amt=Math.max(2,amount-(Math.min(5,p.up.armor)*1.1+Math.log1p(Math.max(0,p.up.armor-5))*.6));if(p.shield>0){let ab=Math.min(amt,p.shield);p.shield-=ab;amt-=ab;p.shieldRecharge=4.5}if(amt>0){p.hp-=amt;if(p===mpPlayers[mpSelfId]||!mpStarted)runStats.damageTaken+=amt;}p.inv=.43;shake=Math.max(shake,1.25);sound('hurt');emit(p.x,p.y,'#ff4e83',12,130);if(p.hp<=0){p.hp=0;if(mpStarted&&mpIsHost){p.downed=true;p.downs=(p.downs||0)+1;p.inv=9;textFly(p.x,p.y-22,'DOWN! REVIVE [R]','#ff8cb3',15);if(mpLiving().length===0)endGame(false);}else{p.downs=(p.downs||0)+1;endGame(false)}}}
+function damagePlayer(amount){if(p.downed||p.hp<=0||p.inv>0)return;let amt=Math.max(2,amount-(Math.min(5,p.up.armor)*1.1+Math.log1p(Math.max(0,p.up.armor-5))*.6));if(p.shield>0){let ab=Math.min(amt,p.shield);p.shield-=ab;amt-=ab;p.shieldRecharge=4.5}if(amt>0){p.hp-=amt;if(p===mpPlayers[mpSelfId]||!mpStarted)runStats.damageTaken+=amt;}p.inv=.43;shake=Math.max(shake,1.25);sound('hurt');emit(p.x,p.y,'#ff4e83',12,130);if(p.hp<=0){p.hp=0;if(mpStarted&&mpIsHost){p.downed=true;p.downs=(p.downs||0)+1;p.inv=9;textFly(p.x,p.y-22,'GHOST · REVIVE [R]','#a0e8ff',15);if(mpLiving().length===0)endGame(false);}else{p.downs=(p.downs||0)+1;endGame(false)}}}
 function endGame(win){if(endlessMode){survivalFinish();return;}if(win&&bossRushMode)sound('victory');$('bossHUD').classList.add('hidden');state=win?'victory':'gameover';if(win&&!bossRushMode){recordCampaignProgress(15);awardCampaignChallenges(p);}if(score>best){best=score;try{localStorage.setItem('crown_crisis_shooter_best',String(best))}catch(err){}}const medals=campaignMedals(),official=win&&!bossRushMode&&isUltimateVictory();$('endEyebrow').textContent=official?'THE FINAL CROWN HAS BEEN CLAIMED':win?(bossRushMode?'PRACTICE COMPLETE · ACHIEVEMENTS NOT COUNTED':'CAMPAIGN FINISHED · '+medals+' OF 8 CERTIFIED'):'SYSTEM FAILURE // CREW RESPAWN';$('endTitle').textContent=official?'ULTIMATE VICTORY!':win?(bossRushMode?'BOSS RUSH CLEARED!':'OPERATIVE CLEARED!'):'CREW MEMBER DOWN!';$('endTitle').className='endTitle'+(win?' win':'');$('endDescription').textContent=official?'All eight operatives have now conquered all 15 waves. The Mossad Destroyer Shark is gone. Your crew has OFFICIALLY won CROWN//CRISIS!':win?(bossRushMode?'You defeated the eight-legged final boss! Boss Rush is practice only and does not award a 15-wave clearance.':`${p.ch.name} survived all 15 campaign waves and earned a GOLD CROWN medal! ${8-medals} more operative${8-medals===1?'':'s'} still need a full 15-wave campaign clear to unlock the official ending.`):`${p.ch.name} reached District ${level+1}, Wave ${wave+1}. Keep upgrading, and return to clear all 15 waves!`;$('endScore').textContent=score.toLocaleString();$('endKills').textContent=kills.toLocaleString();$('endWaves').textContent=cleared+'/15';$('recordText').textContent='PERSONAL BEST: '+best.toLocaleString()+' POINTS';$('careerSummary').textContent=official?'🏆 THE FINAL CROWN UNLOCKED · 8/8 HEROES · 120/120 WAVES':`🏆 HALL OF HEROES · ${medals}/8 COMPLETE · ${C.reduce((sum,c)=>sum+campaignRecords[c.id],0)}/120 WAVES RECORDED${bossRushMode?' · PRACTICE RUN DOES NOT COUNT':''}`;updateAchievementUI();showScreen('endPanel')}
 function updateHud(){if(!p)return;
 $('heroName').textContent=p.ch.name.toUpperCase()+' · '+WEAPON_NAMES[Math.min(6,p.up.blade)];
-$('hpFill').style.width=(100*p.hp/p.maxHp)+'%';$('shieldFill').style.width=(p.shieldMax?100*p.shield/p.shieldMax:0)+'%';
+$('hpFill').style.width=(100*p.hp/p.maxHp)+'%';$('hpFill').style.background=p.downed?'#64a7d9':p.hp/p.maxHp<.26?'linear-gradient(90deg,#fd324b,#ff738d)':p.hp/p.maxHp<.55?'linear-gradient(90deg,#ff954d,#ffd86f)':'linear-gradient(90deg,#26ca92,#a5ffc1)';$('shieldFill').style.width=(p.shieldMax?100*p.shield/p.shieldMax:0)+'%';
 $('hpText').textContent=Math.ceil(p.hp)+' / '+p.maxHp+' HP  ·  '+(p.specialTimer>0?'SUPER '+p.specialTimer.toFixed(1)+'s':'SUPER READY')+'  ·  AUTO '+(auto?'ON':'OFF');
 $('levelText').textContent=endlessMode?'♾ ENDLESS '+difficulty.toUpperCase()+' · '+LEVELS[level].name:'DISTRICT '+(level+1)+' · '+difficulty.toUpperCase()+' · '+LEVELS[level].name;
 $('waveText').textContent=endlessMode?'SURVIVAL WAVE '+survivalWave+' · '+(enemies.filter(e=>!e.dead).length+spawnQueue.length)+' ALIENS':'WAVE '+(wave+1)+'/3  ·  '+(enemies.filter(e=>!e.dead).length+spawnQueue.length)+' ALIENS';
@@ -973,7 +1018,7 @@ if(spawnDelay<=0&&spawnQueue.length){
  }
 }
 navRefresh-=dt;if(navRefresh<=0){navSmall=buildNav(15);navMedium=buildNav(25);navBig=buildNav(36);navHeavy=buildNav(59);navRefresh=enemies.length>130?.78:enemies.length>80?.62:.50}
-for(let e of enemies){if(e.dead)continue;if(mpStarted&&mpIsHost)p=mpTargetFor(e);if(e.navTarget)e.navTarget.life-=dt;if(e.detour)e.detour.ttl-=dt;const navOldX=e.x,navOldY=e.y;e.at-=dt;e.shoot-=dt;e.flash=Math.max(0,e.flash-dt);e.slow=Math.max(0,e.slow-dt);e.poison=Math.max(0,e.poison-dt);if(e.poison>0){e.hp-=12*dt;if(e.hp<=0){killEnemy(e);continue}}let d=dist(e.x,e.y,p.x,p.y),a=ang(e.x,e.y,p.x,p.y),speed=e.speed*(e.slow>0?.35:1);e.angle+=dt*3;
+for(let e of enemies){if(e.dead)continue;if(mpStarted&&mpIsHost){const target=mpTargetFor(e);if(e._targetRef!==target){e.detour=null;e.navTarget=null;e._targetRef=target;}p=target;}if(e.navTarget)e.navTarget.life-=dt;if(e.detour)e.detour.ttl-=dt;const navOldX=e.x,navOldY=e.y;e.at-=dt;e.shoot-=dt;e.flash=Math.max(0,e.flash-dt);e.slow=Math.max(0,e.slow-dt);e.poison=Math.max(0,e.poison-dt);if(e.poison>0){e.hp-=12*dt;if(e.hp<=0){killEnemy(e);continue}}let d=dist(e.x,e.y,p.x,p.y),a=ang(e.x,e.y,p.x,p.y),speed=e.speed*(e.slow>0?.35:1);e.angle+=dt*3;
 // Steer along the street navigation grid when a building blocks the direct chase.
 let chase=pathAngle(e),dx=0,dy=0;
 if(e.type==='p'&&d<450){if(d>220||!clearShot(e.x,e.y,p.x,p.y,3)){dx=Math.cos(chase)*speed*dt;dy=Math.sin(chase)*speed*dt}else if(d<175){dx=-Math.cos(a)*speed*.8*dt;dy=-Math.sin(a)*speed*.8*dt}dx+=Math.sin(a)*20*dt;
@@ -1073,7 +1118,7 @@ for(let s of shots){
 }
 
 shots=shots.filter(s=>s.life>0);enemies=enemies.filter(e=>!e.dead);for(let deb of sharkDebris){deb.life-=dt;deb.x+=deb.vx*dt;deb.y+=deb.vy*dt;deb.vx*=.965;deb.vy*=.965;}sharkDebris=sharkDebris.filter(q=>q.life>0);for(let e of effects)e.life-=dt;effects=effects.filter(e=>e.life>0);for(let f of floaters){f.life-=dt;f.y-=32*dt}floaters=floaters.filter(f=>f.life>0);for(let f of particles){f.x+=f.vx*dt;f.y+=f.vy*dt;f.vx*=.95;f.vy*=.95;f.life-=dt}particles=particles.filter(f=>f.life>0);
-if(!spawnQueue.length&&!enemies.length&&spawnDelay<=0){finishTime+=dt;if(finishTime>1){cleared++;if(!endlessMode)recordCampaignProgress(cleared);sound(cleared===15&&!bossRushMode&&!endlessMode?'victory':'clear');if(endlessMode){survivalAdvance();if(cleared%(difficulty==='insanity'?5:3)===0){openShop();return}state='waveBreak';survivalGap=2.25;showScreen('none');announce('WAVE '+cleared+' CLEARED','NEXT: WAVE '+survivalWave+' · NO SHOP THIS ROUND',1.75);return}if(level===4&&wave===2){endGame(true);return}if(wave===2){level++;wave=0;makeBackground()}else wave++;if(difficulty==='insanity'&&cleared%5!==0){state='waveBreak';survivalGap=2.25;showScreen('none');announce('WAVE '+cleared+' SURVIVED','INSANITY SHOP IN '+(5-cleared%5)+' WAVE(S)',1.8);return;}openShop();return}}else finishTime=0;
+if(!spawnQueue.length&&!enemies.length&&spawnDelay<=0){finishTime+=dt;if(finishTime>1){cleared++;if(mpStarted&&mpIsHost)mpAutoReviveWave();if(!endlessMode)recordCampaignProgress(cleared);sound(cleared===15&&!bossRushMode&&!endlessMode?'victory':'clear');if(endlessMode){survivalAdvance();if(cleared%(difficulty==='insanity'?5:2)===0){openShop();return}state='waveBreak';survivalGap=2.25;showScreen('none');announce('WAVE '+cleared+' CLEARED','NEXT: WAVE '+survivalWave+' · NO SHOP THIS ROUND',1.75);return}if(level===4&&wave===2){endGame(true);return}if(wave===2){level++;wave=0;makeBackground()}else wave++;if(difficulty==='insanity'&&cleared%5!==0){state='waveBreak';survivalGap=2.25;showScreen('none');announce('WAVE '+cleared+' SURVIVED','INSANITY SHOP IN '+(5-cleared%5)+' WAVE(S)',1.8);return;}openShop();return}}else finishTime=0;
 }
 // WORLD GEOMETRY: the drawn building footprints and the physics are the very same rectangles.
 function isSolid(x,y,r=0){
@@ -1126,17 +1171,23 @@ function buildNav(clearance){
  for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
    if(!isSolid(cx[i],cy[j],clearance+2))walk[j*cols+i]=1;
  }
- let seed=-1,bestDist=Infinity;
- for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
-  const index=j*cols+i;if(!walk[index])continue;
-  let d=(cx[i]-p.x)**2+(cy[j]-p.y)**2;
-  if(d<bestDist){seed=index;bestDist=d}
+ const targets=mpStarted&&mpIsHost?mpLiving():p?[p]:[];
+ if(!targets.length)return {cols,rows,walk,cost,cx,cy,clearance};
+ const seeds=[];
+ for(const target of targets){
+  let seed=-1,bestDist=Infinity;
+  for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
+   const index=j*cols+i;if(!walk[index])continue;
+   const d=(cx[i]-target.x)**2+(cy[j]-target.y)**2;
+   if(d<bestDist){seed=index;bestDist=d;}
+  }
+  if(seed>=0&&!seeds.includes(seed))seeds.push(seed);
  }
- if(seed<0)return {cols,rows,walk,cost,cx,cy,clearance};
+ if(!seeds.length)return {cols,rows,walk,cost,cx,cy,clearance};
  const heap=[];
  function push(idx,d){let k=heap.length;heap.push([idx,d]);while(k>0){const par=(k-1)>>1;if(heap[par][1]<=d)break;heap[k]=heap[par];k=par;}heap[k]=[idx,d];}
  function pop(){const top=heap[0],last=heap.pop();if(!heap.length)return top;let k=0;while(true){let c=k*2+1;if(c>=heap.length)break;if(c+1<heap.length&&heap[c+1][1]<heap[c][1])c++;if(heap[c][1]>=last[1])break;heap[k]=heap[c];k=c;}heap[k]=last;return top;}
- cost[seed]=0;push(seed,0);
+ for(const seed of seeds){cost[seed]=0;push(seed,0);}
  while(heap.length){
   const [idx,distSoFar]=pop();if(distSoFar>cost[idx]+.001)continue;
   const x=idx%cols,y=(idx/cols)|0;
@@ -1589,6 +1640,19 @@ function drawCrewSprite(g,actor,x,y,tt,previewScale=1){
 function drawPlayer(actor=p){
 const visual=mpStarted&&!mpIsHost?(actor===p?{x:actor.visualX??actor.x,y:actor.visualY??actor.y}:mpVisualPosition(actor)):{x:actor.x,y:actor.y};let xy=screenXY(visual.x,visual.y),x=xy.x,y=xy.y,ch=actor.ch;
 if(x<-75||x>W+75||y<-90||y>H+80)return;
+if(actor.downed){
+ const bob=Math.sin(time*4.5+actor.x*.01)*5;
+ ctx.save();ctx.globalAlpha=.16+.09*Math.sin(time*6);
+ ctx.fillStyle='#68cfff';ctx.beginPath();ctx.ellipse(x,y+2,28,10,0,0,6.283);ctx.fill();
+ ctx.globalAlpha=.32+.16*Math.sin(time*3);ctx.shadowColor='#7deaff';ctx.shadowBlur=18;
+ drawCrewSprite(ctx,{...actor,moving:0,muzzle:0,rapid:0},x,y-14+bob,time,1);
+ ctx.shadowBlur=0;ctx.globalAlpha=.82;ctx.strokeStyle='#b9f6ff';ctx.lineWidth=2;
+ ctx.beginPath();ctx.ellipse(x,y-76+bob,19,6,0,0,6.283);ctx.stroke();
+ ctx.font='900 11px monospace';ctx.textAlign='center';ctx.fillStyle='#cbfcff';
+ ctx.strokeStyle='#05112b';ctx.lineWidth=3;ctx.strokeText('GHOST',x,y-98+bob);ctx.fillText('GHOST',x,y-98+bob);
+ if(actor.reviveProgress>0){ctx.fillStyle='#09192e';ctx.fillRect(x-24,y-89,48,7);ctx.fillStyle='#75ffc8';ctx.fillRect(x-22,y-87,44*clamp(actor.reviveProgress/1.7,0,1),3);}
+ ctx.restore();return;
+}
 drawCrewSprite(ctx,actor,x,y,time,1);
 const liveBuffs=actor.buffs?BOOST_KEYS.filter(k=>actor.buffs[k]>0):[];
 if(liveBuffs.length){const def=BOOST_TYPES[liveBuffs[Math.floor(time*2)%liveBuffs.length]];
@@ -1842,7 +1906,7 @@ for(let f of floaters){let q=screenXY(f.x,f.y);ctx.save();ctx.globalAlpha=clamp(
 drawAlienHealthBars();
 if(state==='playing'){
 if(mouse.moved){ctx.save();ctx.strokeStyle='#c5ffe9';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(mouse.x-13,mouse.y);ctx.lineTo(mouse.x-5,mouse.y);ctx.moveTo(mouse.x+5,mouse.y);ctx.lineTo(mouse.x+13,mouse.y);ctx.moveTo(mouse.x,mouse.y-13);ctx.lineTo(mouse.x,mouse.y-5);ctx.moveTo(mouse.x,mouse.y+5);ctx.lineTo(mouse.x,mouse.y+13);ctx.stroke();ctx.restore()}
-ctx.font='bold 11px Consolas,monospace';ctx.textAlign='center';ctx.fillStyle='#c4e7ed';ctx.fillText(p.downed?'☠ DOWNED — WAIT FOR REVIVE':p.specialTimer<=0?'✦ '+p.ch.power+' READY [E]':'✦ '+p.ch.power+' '+Math.ceil(p.specialTimer)+'s',W/2,H-21);if(auto){ctx.fillStyle='#fff19d';ctx.fillText('AUTO FIRE ON [C]',W/2,H-39)}
+ctx.font='bold 11px Consolas,monospace';ctx.textAlign='center';ctx.fillStyle='#c4e7ed';ctx.fillText(p.downed?'👻 GHOST · TEAMMATE REVIVE [R] OR WAVE CLEAR':p.specialTimer<=0?'✦ '+p.ch.power+' READY [E]':'✦ '+p.ch.power+' '+Math.ceil(p.specialTimer)+'s',W/2,H-21);if(auto){ctx.fillStyle='#fff19d';ctx.fillText('AUTO FIRE ON [C]',W/2,H-39)}
 }}
 if(p&&(state==='playing'||state==='bossVictory'))drawRetroHud();if(p)drawBoostHud();
 ctx.restore();}
@@ -1872,7 +1936,7 @@ function mpProcessRevives(dt){
   if(!actor.downed)continue;
   const nearestHelper=Object.entries(mpPlayers).filter(([id,a])=>a!==actor&&!a.downed&&a.hp>0&&mpRoster.find(m=>m.id===id)?.connected!==false&&((id===mpSelfId&&keys.has('r'))||(id!==mpSelfId&&(mpInput[id]||{}).revive))&&dist(a.x,a.y,actor.x,actor.y)<82);
   actor.reviveProgress=nearestHelper.length?Math.min(1.7,(actor.reviveProgress||0)+dt):Math.max(0,(actor.reviveProgress||0)-dt*1.4);
-  if(actor.reviveProgress>=1.7){const helper=nearestHelper[0]?.[1];if(helper){helper.revives=(helper.revives||0)+1;if(helper===mpPlayers[mpSelfId]&&difficulty==='insanity'&&helper.revives>=3)awardDiff('insanity_medic');}actor.downed=false;actor.reviveProgress=0;actor.hp=Math.max(28,Math.round(actor.maxHp*.38));actor.inv=1.6;emit(actor.x,actor.y,'#76ffcb',28,95);textFly(actor.x,actor.y-30,'REVIVED!','#b8ffe6',18);}
+  if(actor.reviveProgress>=1.7){const helper=nearestHelper[0]?.[1];if(helper){helper.revives=(helper.revives||0)+1;helper.gold=(helper.gold||0)+6;score+=120;textFly(helper.x,helper.y-38,'TEAM REVIVE · +6 GOLD · +120 SCORE','#ffdf89',12);if(helper===mpPlayers[mpSelfId]&&difficulty==='insanity'&&helper.revives>=3)awardDiff('insanity_medic');}actor.downed=false;actor.reviveProgress=0;actor.hp=Math.max(28,Math.round(actor.maxHp*.38));actor.inv=1.6;emit(actor.x,actor.y,'#76ffcb',28,95);textFly(actor.x,actor.y-30,'REVIVED!','#b8ffe6',18);}
  }
 }
 function mpHostStart(members){
@@ -1971,12 +2035,29 @@ function mpApplySnapshot(snapshot){
 let mpLastTeamRender=0;
 function mpRenderTeam(force=false){
  const team=$('coopTeam');if(!mpStarted){team.hidden=true;return;}team.hidden=false;
- const now=performance.now();if(!force&&now-mpLastTeamRender<350)return;mpLastTeamRender=now;
- team.replaceChildren();const head=document.createElement('div');head.textContent='CO-OP · '+mpRoom+' · '+(mpRoster.length)+' / 4 · '+(mpIsHost?'HOST':'PING '+(mpRttMs||'…')+'ms')+' · '+Math.round(mpFps)+' FPS'+(!mpIsHost?' · '+Math.round(mpKbps)+' KB/s':'');head.style.color='#9fffe6';team.append(head);
- for(const member of mpRoster){const actor=mpPlayers[member.id],line=document.createElement('div');const hp=actor?Math.ceil(actor.hp):'…';line.className=actor&&actor.downed?'low':'';line.textContent=(member.connected===false?'⌛ ':'● ')+member.name+' ('+C[member.hero].name+') · '+hp+' HP'+(member.connected===false?' · RECONNECTING':'');team.append(line);}
- const hint=document.createElement('div');hint.style.color='#bac9d6';hint.textContent='Hold R near a downed teammate to revive';team.append(hint);
+ const now=performance.now();if(!force&&now-mpLastTeamRender<420)return;mpLastTeamRender=now;
+ team.replaceChildren();
+ const head=document.createElement('div');head.className='coopHeaderLine';
+ head.textContent='SQUAD '+mpRoster.length+'/4 · '+(mpIsHost?'HOST':(mpRttMs||'…')+'ms')+' · '+Math.round(mpFps)+' FPS';team.append(head);
+ for(const member of mpRoster){
+  const actor=mpPlayers[member.id],isSelf=member.id===mpSelfId,ghost=!!actor?.downed;
+  const line=document.createElement('div');line.className='coopMember'+(ghost?' ghost':'')+(isSelf?' self':'');
+  const top=document.createElement('div');top.className='memberTop';
+  const name=document.createElement('span');name.className='memberName';name.textContent=(isSelf?'★ ':'')+member.name;
+  const hp=document.createElement('span');hp.className='memberHP';
+  hp.textContent=member.connected===false?'OFFLINE':ghost?'GHOST':actor?Math.ceil(actor.hp)+'/'+actor.maxHp:'···';
+  top.append(name,hp);line.append(top);
+  const outer=document.createElement('div');outer.className='memberBar';
+  const bar=document.createElement('div');bar.className='memberFill';
+  bar.style.width=actor&&!ghost?clamp(100*actor.hp/Math.max(1,actor.maxHp),0,100)+'%':'0%';
+  outer.append(bar);line.append(outer);
+  team.append(line);
+ }
+ const hint=document.createElement('div');hint.className='coopHint';
+ hint.textContent='HOLD R TO REVIVE · +6 GOLD / +120 SCORE · GHOSTS RETURN ON WAVE CLEAR';
+ team.append(hint);
 }
-function mpSetMatchUI(){$('coopPanel').hidden=true;$('coopOpen').hidden=true;$('coopExit').hidden=false;mpRenderTeam();}
+function mpSetMatchUI(){$('hudleft').appendChild($('coopTeam'));$('coopPanel').hidden=true;$('coopOpen').hidden=true;$('coopExit').hidden=false;mpRenderTeam(true);}
 function mpHostBuy(id,item){
  const actor=mpPlayers[id],it=SHOP.find(q=>q.id===item);if(state!=='shop'||!canBuy(actor,it))return;upgradeActor(actor,it);mpBroadcast();
 }
