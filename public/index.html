@@ -177,7 +177,7 @@
   <canvas id="menuAnimation" width="1672" height="941" aria-hidden="true"></canvas>
   <div id="heroGrid" role="group" aria-label="Choose your character"></div>
   <section id="modeGateway" aria-label="Choose a game mode">
-    <div class="gatePanel"><div class="gateEyebrow">CROWN//CRISIS · BETA V33</div><h1>THE INVASION<br>STARTS HERE</h1><p>Choose how you want to fight.</p>
+    <div class="gatePanel"><div class="gateEyebrow">CROWN//CRISIS · BETA V34</div><h1>THE INVASION<br>STARTS HERE</h1><p>Choose how you want to fight.</p>
       <div class="gateButtons"><button id="gateSolo" type="button">🎮 SINGLE PLAYER <small>Choose your fighter and difficulty</small></button><button id="gateMulti" type="button">🌐 MULTIPLAYER <small>Create or join a private co-op lobby</small></button></div>
       <small class="gateFoot">15-WAVE CAMPAIGN · ENDLESS SURVIVAL · 8 FIGHTERS</small></div>
   </section>
@@ -450,10 +450,20 @@ try{best=Number(localStorage.getItem('crown_crisis_shooter_best')||0)}catch(e){}
 // CO-OP V30. The lobby creator is the simulation authority. Guests send
 // controls only; they never create enemies, damage targets, or award gold.
 let mpMatchMode='campaign';let mpEnabled=false,mpStarted=false,mpIsHost=false,mpSocket=null,mpSelfId='',mpHostId='',mpRoom='',mpRoster=[],mpPlayers={},mpInput={},mpLastSnapshot=0,mpShopKey='',mpEnemySerial=0,mpShotSerial=0;
+// V34 reconnect safety: a private random token reserves the same player slot for two minutes.
+const mpSessionToken=(()=>{try{const key='crown_crisis_v34_session';let t=sessionStorage.getItem(key);if(!t||t.length<24){t=(crypto.randomUUID?crypto.randomUUID():Array.from(crypto.getRandomValues(new Uint8Array(24)),b=>b.toString(16).padStart(2,'0')).join(''));sessionStorage.setItem(key,t);}return t}catch(e){return 'client-'+Date.now()+'-'+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2)}})();
+let mpRecovering=false,mpHostOffline=false,mpRetryTimer=null,mpReconnectAttempts=0,mpLastPong=Date.now();
+// Live diagnostics help distinguish server/network delay from low client FPS.
+let mpRttMs=0,mpFps=0,mpFrameCount=0,mpFpsStart=performance.now(),mpInboundBytes=0,mpKbps=0,mpMeterStart=performance.now();
+const mpNetworkNotice=document.createElement('div');mpNetworkNotice.id='mpNetworkNotice';mpNetworkNotice.style.cssText='position:fixed;z-index:2100;left:50%;top:14px;transform:translateX(-50%);background:#111325ef;color:#f9e3ac;border:2px solid #ffc56a;border-radius:9px;padding:10px 15px;max-width:90vw;font:bold 13px monospace;text-align:center;box-shadow:0 3px 24px #0009;pointer-events:none;display:none';document.body.append(mpNetworkNotice);
+function mpNetShow(message){mpNetworkNotice.textContent=message;mpNetworkNotice.style.display='block'}
+function mpNetHide(){mpNetworkNotice.style.display='none'}
+function mpScheduleReconnect(){if(mpRetryTimer||!mpRoom)return;const delay=Math.min(9500,1200*Math.pow(1.7,Math.min(5,mpReconnectAttempts++)));mpRetryTimer=setTimeout(()=>{mpRetryTimer=null;if(mpRecovering&&!mpSocket)mpConnect()},delay)}
+
 const mpPulse={special:false,dash:false};
-function mpSend(type,data={}){if(mpSocket&&mpSocket.readyState===WebSocket.OPEN)mpSocket.send(JSON.stringify({type,...data}));}
+function mpSend(type,data={}){if(mpSocket&&mpSocket.readyState===WebSocket.OPEN){if(type==='state'&&mpSocket.bufferedAmount>150000)return;mpSocket.send(JSON.stringify({type,...data}));}}
 function mpAsActor(actor,fn){const previous=p;p=actor;try{return fn()}finally{p=previous}}
-function mpLiving(){return Object.values(mpPlayers).filter(a=>a&&a.hp>0&&!a.downed)}
+function mpLiving(){return Object.entries(mpPlayers).filter(([id,a])=>a&&a.hp>0&&!a.downed&&mpRoster.find(m=>m.id===id)?.connected!==false).map(([,a])=>a)}
 function mpTargetFor(e){const living=mpLiving();if(!living.length)return p;return living.reduce((best,cur)=>dist(cur.x,cur.y,e.x,e.y)<dist(best.x,best.y,e.x,e.y)?cur:best,living[0])}
 function mpActiveCount(){return mpStarted?Math.max(1,mpRoster.length):1}
 function mpGrantGold(amount){const reward=Math.max(0,Math.min(3,Math.floor(amount)));for(const actor of Object.values(mpPlayers))actor.gold+=reward;return reward}
@@ -944,7 +954,7 @@ $('levelText').textContent=endlessMode?'♾ ENDLESS '+difficulty.toUpperCase()+'
 $('waveText').textContent=endlessMode?'SURVIVAL WAVE '+survivalWave+' · '+(enemies.filter(e=>!e.dead).length+spawnQueue.length)+' ALIENS':'WAVE '+(wave+1)+'/3  ·  '+(enemies.filter(e=>!e.dead).length+spawnQueue.length)+' ALIENS';
 $('goldText').textContent='◈ '+p.gold.toLocaleString();$('scoreText').textContent='SCORE '+score.toLocaleString()+' · '+kills+' KILLS';
 $('comboText').textContent=combo>1?combo+'x COMBO':'SHOOT THE INVADERS';if(mpStarted&&mpIsHost)mpRenderTeam()}
-function tick(dt){if(mpStarted&&!mpIsHost){time+=dt;hudTick-=dt;if(hudTick<=0&&p){updateHud();hudTick=.12;}return;}time+=dt;if(announceUntil&&time>announceUntil){$('message').style.opacity=0;announceUntil=0}if(state==='waveBreak'){survivalGap-=dt;if(survivalGap<=0)startWave();return}if(state==='bossVictory'){bossVictoryTimer-=dt;for(let f of particles){f.x+=f.vx*dt;f.y+=f.vy*dt;f.life-=dt}particles=particles.filter(f=>f.life>0);for(let f of effects)f.life-=dt;effects=effects.filter(f=>f.life>0);if(bossVictoryTimer<=0)endGame(true);return}if(state!=='playing'){return}if(!p)return;hudTick-=dt;if(hudTick<=0){updateHud();hudTick=.11}shake=Math.max(0,shake-42*dt);if(comboTimer>0){comboTimer-=dt;if(comboTimer<=0)combo=0};p.inv=Math.max(0,p.inv-dt);p.atkTimer=Math.max(0,p.atkTimer-dt);p.swing=Math.max(0,p.swing-dt);p.specialTimer=Math.max(0,p.specialTimer-dt);p.dashCD=Math.max(0,p.dashCD-dt);p.rapid=Math.max(0,p.rapid-dt);p.loot=Math.max(0,p.loot-dt);p.muzzle=Math.max(0,p.muzzle-dt);p.dashTime=Math.max(0,p.dashTime-dt);tickBoosts(p,dt);p.shieldRecharge=Math.max(0,p.shieldRecharge-dt);if(p.shieldRecharge<=0&&p.shield<p.shieldMax)p.shield=Math.min(p.shieldMax,p.shield+5*dt);
+function tick(dt){if(mpStarted&&(mpRecovering||(!mpIsHost&&mpHostOffline))){time+=dt;return;}if(mpStarted&&!mpIsHost){time+=dt;hudTick-=dt;if(hudTick<=0&&p){updateHud();hudTick=.12;}return;}time+=dt;if(announceUntil&&time>announceUntil){$('message').style.opacity=0;announceUntil=0}if(state==='waveBreak'){survivalGap-=dt;if(survivalGap<=0)startWave();return}if(state==='bossVictory'){bossVictoryTimer-=dt;for(let f of particles){f.x+=f.vx*dt;f.y+=f.vy*dt;f.life-=dt}particles=particles.filter(f=>f.life>0);for(let f of effects)f.life-=dt;effects=effects.filter(f=>f.life>0);if(bossVictoryTimer<=0)endGame(true);return}if(state!=='playing'){return}if(!p)return;hudTick-=dt;if(hudTick<=0){updateHud();hudTick=.11}shake=Math.max(0,shake-42*dt);if(comboTimer>0){comboTimer-=dt;if(comboTimer<=0)combo=0};p.inv=Math.max(0,p.inv-dt);p.atkTimer=Math.max(0,p.atkTimer-dt);p.swing=Math.max(0,p.swing-dt);p.specialTimer=Math.max(0,p.specialTimer-dt);p.dashCD=Math.max(0,p.dashCD-dt);p.rapid=Math.max(0,p.rapid-dt);p.loot=Math.max(0,p.loot-dt);p.muzzle=Math.max(0,p.muzzle-dt);p.dashTime=Math.max(0,p.dashTime-dt);tickBoosts(p,dt);p.shieldRecharge=Math.max(0,p.shieldRecharge-dt);if(p.shieldRecharge<=0&&p.shield<p.shieldMax)p.shield=Math.min(p.shieldMax,p.shield+5*dt);
 let mx=(keys.has('d')||keys.has('arrowright')?1:0)-(keys.has('a')||keys.has('arrowleft')?1:0)+joy.x,my=(keys.has('s')||keys.has('arrowdown')?1:0)-(keys.has('w')||keys.has('arrowup')?1:0)+joy.y,mag=Math.hypot(mx,my),norm=mag>0?Math.max(1,mag):1;mx/=norm;my/=norm;
 let vel=(215+speedBonus(p.up.speed))*p.ch.speed*(boostActive(p,'speed')?1.18:1)*(p.dashTime>0?3.65:1);p.moving=mag;p.walkTime=(p.walkTime||0)+mag*(p.dashTime>0?22:12)*dt;if(!p.downed)moveSolid(p,mx*vel*dt,my*vel*dt);
 if(p.up.speed>0&&mag>.1&&rand()<Math.min(.8,dt*(9+p.up.speed*4)))emit(p.x-mx*12,p.y-my*12,p.ch.accent,1,18);
@@ -962,7 +972,7 @@ if(spawnDelay<=0&&spawnQueue.length){
    spawnCool=.16+rand()*.15;
  }
 }
-navRefresh-=dt;if(navRefresh<=0){navSmall=buildNav(15);navMedium=buildNav(25);navBig=buildNav(36);navHeavy=buildNav(59);navRefresh=.50}
+navRefresh-=dt;if(navRefresh<=0){navSmall=buildNav(15);navMedium=buildNav(25);navBig=buildNav(36);navHeavy=buildNav(59);navRefresh=enemies.length>130?.78:enemies.length>80?.62:.50}
 for(let e of enemies){if(e.dead)continue;if(mpStarted&&mpIsHost)p=mpTargetFor(e);if(e.navTarget)e.navTarget.life-=dt;if(e.detour)e.detour.ttl-=dt;const navOldX=e.x,navOldY=e.y;e.at-=dt;e.shoot-=dt;e.flash=Math.max(0,e.flash-dt);e.slow=Math.max(0,e.slow-dt);e.poison=Math.max(0,e.poison-dt);if(e.poison>0){e.hp-=12*dt;if(e.hp<=0){killEnemy(e);continue}}let d=dist(e.x,e.y,p.x,p.y),a=ang(e.x,e.y,p.x,p.y),speed=e.speed*(e.slow>0?.35:1);e.angle+=dt*3;
 // Steer along the street navigation grid when a building blocks the direct chase.
 let chase=pathAngle(e),dx=0,dy=0;
@@ -994,9 +1004,14 @@ for(let s of shots){
  // Compare actual travel-time of walls, enemies and the boss's eight mechanical legs.
  const wallT=firstShotWallT(ox,oy,nx,ny,s.r*.55);
  let bestT=wallT,bestEnemy=null,bestLeg=null,bestIsBossBody=false;
+ const minX=Math.min(ox,nx),maxX=Math.max(ox,nx),minY=Math.min(oy,ny),maxY=Math.max(oy,ny);
  if(s.friendly){
   for(const e of enemies){
    if(e.dead)continue;
+   // Broad-phase culling keeps dense Endless waves from doing expensive
+   // segment geometry against monsters hundreds of pixels away.
+   const reach=e.type==='shark'?230:e.r+24+s.r;
+   if(e.x<minX-reach||e.x>maxX+reach||e.y<minY-reach||e.y>maxY+reach)continue;
    if(e.type==='shark'&&e.legs){
     for(const leg of e.legs){
      if(leg.broken)continue;
@@ -1096,7 +1111,7 @@ function moveSolid(o,dx,dy){
  }
  return o;
 }
-function clearShot(x1,y1,x2,y2,r=0){for(const b of [...buildings,...obstacles]){let lo=0,hi=1,vx=x2-x1,vy=y2-y1;const minx=b.x-r,maxx=b.x+b.w+r,miny=b.y-r,maxy=b.y+b.h+r;
+function clearShot(x1,y1,x2,y2,r=0){const bn=buildings.length,on=obstacles.length;for(let i=0;i<bn+on;i++){const b=i<bn?buildings[i]:obstacles[i-bn];let lo=0,hi=1,vx=x2-x1,vy=y2-y1;const minx=b.x-r,maxx=b.x+b.w+r,miny=b.y-r,maxy=b.y+b.h+r;
 if(!vx){if(x1<minx||x1>maxx)continue}else{let a=(minx-x1)/vx,z=(maxx-x1)/vx;if(a>z)[a,z]=[z,a];lo=Math.max(lo,a);hi=Math.min(hi,z)}
 if(!vy){if(y1<miny||y1>maxy)continue}else{let a=(miny-y1)/vy,z=(maxy-y1)/vy;if(a>z)[a,z]=[z,a];lo=Math.max(lo,a);hi=Math.min(hi,z)}if(lo<=hi)return false}return true}
 // Route fields shared by all enemies of a comparable size. Obstacles and roofs
@@ -1420,7 +1435,7 @@ function drawJoint(x,y,r,flash){
  ctx.fillStyle='#f64861';ctx.fillRect(x-3,y-4,7,6);ctx.fillStyle='#ffe2b5';ctx.fillRect(x-2,y-3,3,2);
 }
 function drawShark(e){
- const q=screenXY(e.x,e.y),x=q.x,y=q.y;if(x<-340||x>W+340||y<-310||y>H+310)return;
+ const loc=mpStarted&&!mpIsHost&&e.netId?mpVisualPosition(e):e,q=screenXY(loc.x,loc.y),x=q.x,y=q.y;if(x<-340||x>W+340||y<-310||y>H+310)return;
  const alive=e.legs.filter(z=>!z.broken).length,phase=(8-alive)*.07;
  const pulse=Math.sin(time*(2.2+phase))*2.1;
  ctx.save();ctx.fillStyle='#0303109c';ctx.beginPath();ctx.ellipse(x+5,y+18,207,62,0,0,6.29);ctx.fill();ctx.restore();
@@ -1453,7 +1468,7 @@ function drawShark(e){
 }
 function drawAlien(e){
 if(e.type==='shark'){drawShark(e);return}
-let rx=e.x,ry=e.y;if(mpStarted&&!mpIsHost&&e.netId){e.renderX=lerp(e.renderX??rx,rx,.22);e.renderY=lerp(e.renderY??ry,ry,.22);rx=e.renderX;ry=e.renderY;}let q=screenXY(rx,ry),x=q.x,y=q.y,r=e.r;
+const visual=mpStarted&&!mpIsHost&&e.netId?mpVisualPosition(e):{x:e.x,y:e.y};let q=screenXY(visual.x,visual.y),x=q.x,y=q.y,r=e.r;
 if(x<-145||x>W+145||y<-170||y>H+105)return;
 const type=e.type,frames=ALIEN_FRAMES[type]||ALIEN_FRAMES.g;
 const t=time+(e.seed||0)*.033,pace=type==='s'?12:type==='c'?9:type==='g'?7:type==='t'?3.5:5;
@@ -1495,7 +1510,7 @@ function drawAlienHealthBars(){
  for(const e of enemies){
    if(e.dead||e.type==='shark')continue;
    const size=e.type==='king'?154:e.type==='t'?119:e.type==='b'?93:e.type==='s'?55:e.type==='c'?76:e.type==='p'?77:68;
-   const q=screenXY(e.x,e.y),w=e.type==='king'?102:e.type==='t'?64:e.type==='b'?51:42;
+   const q=screenXY((mpStarted&&!mpIsHost&&e.netId?mpVisualPosition(e):e).x,(mpStarted&&!mpIsHost&&e.netId?mpVisualPosition(e):e).y),w=e.type==='king'?102:e.type==='t'?64:e.type==='b'?51:42;
    const x=Math.round(q.x-w/2),y=Math.round(q.y-size-12);
    if(x>W+6||x+w<-6||y>H+8||y<-16)continue;
    const ratio=Math.max(0,Math.min(1,e.hp/e.maxHp));
@@ -1572,7 +1587,7 @@ function drawCrewSprite(g,actor,x,y,tt,previewScale=1){
  g.restore();g.restore();
 }
 function drawPlayer(actor=p){
-let rx=actor.x,ry=actor.y;if(mpStarted&&!mpIsHost){actor.visualX=lerp(actor.visualX??rx,rx,.20);actor.visualY=lerp(actor.visualY??ry,ry,.20);rx=actor.visualX;ry=actor.visualY;}let xy=screenXY(rx,ry),x=xy.x,y=xy.y,ch=actor.ch;
+const visual=mpStarted&&!mpIsHost?(actor===p?{x:actor.visualX??actor.x,y:actor.visualY??actor.y}:mpVisualPosition(actor)):{x:actor.x,y:actor.y};let xy=screenXY(visual.x,visual.y),x=xy.x,y=xy.y,ch=actor.ch;
 if(x<-75||x>W+75||y<-90||y>H+80)return;
 drawCrewSprite(ctx,actor,x,y,time,1);
 const liveBuffs=actor.buffs?BOOST_KEYS.filter(k=>actor.buffs[k]>0):[];
@@ -1668,7 +1683,7 @@ function shotStar(c,points,inner,outer,turn=0){
  c.beginPath();for(let j=0;j<points*2;j++){const a=turn+j*Math.PI/points,r=j%2?inner:outer;
  const xx=Math.cos(a)*r,yy=Math.sin(a)*r;if(j===0)c.moveTo(xx,yy);else c.lineTo(xx,yy);}c.closePath();}
 function drawProjectile(s){
- let rx=s.x,ry=s.y;if(mpStarted&&!mpIsHost&&s.netId){s.renderX=lerp(s.renderX??rx,rx,.25);s.renderY=lerp(s.renderY??ry,ry,.25);rx=s.renderX;ry=s.renderY;}const q=screenXY(rx,ry),z=screenXY(rx-s.vx*.022,ry-s.vy*.022);
+ const visual=mpStarted&&!mpIsHost&&s.netId?mpVisualPosition(s):{x:s.x,y:s.y};const rx=visual.x,ry=visual.y,q=screenXY(rx,ry),z=screenXY(rx-s.vx*.022,ry-s.vy*.022);
  if(q.x<-40||q.x>W+40||q.y<-50||q.y>H+45)return;
  const id=s.owner||'alien',pal=SHOT_PALETTES[id]||SHOT_PALETTES.alien;
  const tier=s.visualTier||0,scale=(s.friendly?1:1.0)*(1+Math.min(tier,6)*.11)*(s.specialShot?1.23:1);
@@ -1797,8 +1812,9 @@ ctx.save();ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,W,H);
 if(p){
  const padX=Math.abs(VIEW_SHEAR)*H/(2*VIEW_TILT)+3;
  const padY=(H/2)*(1/VIEW_TILT-1)+3;
- const tx=clamp(p.x-W/2,padX,Math.max(padX,WORLD.w-W-padX));
- const ty=clamp(p.y-H/2,padY,Math.max(padY,WORLD.h-H-padY));
+ const viewX=mpStarted&&!mpIsHost?(p.visualX??p.x):p.x,viewY=mpStarted&&!mpIsHost?(p.visualY??p.y):p.y;
+ const tx=clamp(viewX-W/2,padX,Math.max(padX,WORLD.w-W-padX));
+ const ty=clamp(viewY-H/2,padY,Math.max(padY,WORLD.h-H-padY));
  cam.x=lerp(cam.x,tx,.082);cam.y=lerp(cam.y,ty,.082);
  // Never allow camera easing to expose empty space outside the map.
  cam.x=clamp(cam.x,padX,Math.max(padX,WORLD.w-W-padX));
@@ -1836,6 +1852,7 @@ function mpUpdateRemoteActors(dt){
  for(const member of mpRoster){
   if(member.id===mpSelfId)continue;
   const actor=mpPlayers[member.id],input=mpInput[member.id]||{};if(!actor)continue;
+  if(member.connected===false){actor.moving=0;actor.inv=Math.max(actor.inv,.6);mpInput[member.id]={};continue;}
   actor.inv=Math.max(0,actor.inv-dt);actor.atkTimer=Math.max(0,actor.atkTimer-dt);actor.specialTimer=Math.max(0,actor.specialTimer-dt);actor.dashCD=Math.max(0,actor.dashCD-dt);actor.dashTime=Math.max(0,actor.dashTime-dt);tickBoosts(actor,dt);actor.rapid=Math.max(0,actor.rapid-dt);actor.loot=Math.max(0,actor.loot-dt);actor.muzzle=Math.max(0,actor.muzzle-dt);actor.shieldRecharge=Math.max(0,actor.shieldRecharge-dt);if(actor.shieldRecharge<=0&&actor.shield<actor.shieldMax)actor.shield=Math.min(actor.shieldMax,actor.shield+5*dt);
   let mx=clamp(Number(input.mx)||0,-1,1),my=clamp(Number(input.my)||0,-1,1),mag=Math.hypot(mx,my),norm=Math.max(1,mag);mx/=norm;my/=norm;
   actor.moving=actor.downed?0:mag;actor.walkTime=(actor.walkTime||0)+actor.moving*(actor.dashTime>0?22:12)*dt;
@@ -1853,7 +1870,7 @@ function mpUpdateRemoteActors(dt){
 function mpProcessRevives(dt){
  for(const actor of Object.values(mpPlayers)){
   if(!actor.downed)continue;
-  const nearestHelper=Object.entries(mpPlayers).filter(([id,a])=>a!==actor&&!a.downed&&a.hp>0&&((id===mpSelfId&&keys.has('r'))||(id!==mpSelfId&&(mpInput[id]||{}).revive))&&dist(a.x,a.y,actor.x,actor.y)<82);
+  const nearestHelper=Object.entries(mpPlayers).filter(([id,a])=>a!==actor&&!a.downed&&a.hp>0&&mpRoster.find(m=>m.id===id)?.connected!==false&&((id===mpSelfId&&keys.has('r'))||(id!==mpSelfId&&(mpInput[id]||{}).revive))&&dist(a.x,a.y,actor.x,actor.y)<82);
   actor.reviveProgress=nearestHelper.length?Math.min(1.7,(actor.reviveProgress||0)+dt):Math.max(0,(actor.reviveProgress||0)-dt*1.4);
   if(actor.reviveProgress>=1.7){const helper=nearestHelper[0]?.[1];if(helper){helper.revives=(helper.revives||0)+1;if(helper===mpPlayers[mpSelfId]&&difficulty==='insanity'&&helper.revives>=3)awardDiff('insanity_medic');}actor.downed=false;actor.reviveProgress=0;actor.hp=Math.max(28,Math.round(actor.maxHp*.38));actor.inv=1.6;emit(actor.x,actor.y,'#76ffcb',28,95);textFly(actor.x,actor.y-30,'REVIVED!','#b8ffe6',18);}
  }
@@ -1866,25 +1883,79 @@ function mpHostStart(members){
  members.forEach((member,index)=>{if(member.id===mpSelfId)return;const a=mpCreateActor(member.hero,WORLD.w/2+offsets[index%4][0],WORLD.h/2+offsets[index%4][1]);for(let k=0;k<20&&isSolid(a.x,a.y,a.r);k++){a.x=WORLD.w/2+(k%5-2)*58;a.y=WORLD.h/2+(Math.floor(k/5)-2)*52;}mpPlayers[member.id]=a;});
  mpSetMatchUI();mpBroadcast();announce('ONLINE CO-OP STARTED',members.length+(endlessMode?' OPERATIVES · ENDLESS SURVIVAL':' OPERATIVES · 15 WAVES'),2.5);
 }
-function mpPackActor(a){const result={...a,hero:C.indexOf(a.ch)};delete result.ch;delete result._mpAim;return result}
+// V35 bandwidth pass: only network fields used for rendering are transmitted.
+// Enemy navigation, collision timers, target caches and hit logic remain host-only.
+function mpPackActor(a){const result={...a,hero:C.indexOf(a.ch)};delete result.ch;delete result._mpAim;delete result.visualX;delete result.visualY;return result}
+const MP_ENEMY_FIELDS=['netId','type','x','y','r','hp','maxHp','elite','flash','seed','angle','slow','legs','sharkLeg','sharkWarning','sharkNovaWarn','sharkMineWarn','sharkMineTargets','sharkHint','sharkFire','sharkStomp'];
+const MP_SHOT_FIELDS=['netId','x','y','vx','vy','r','friendly','color','owner','visualTier','specialShot','createdAt'];
+function mpVisualFields(obj,fields){const out={};for(const k of fields)if(obj[k]!==undefined)out[k]=obj[k];return out}
 function mpBuildSnapshot(){
  return {state,level,wave,cleared,score,kills,combo,remaining:spawnQueue.length,bossRushMode,endlessMode,survivalWave,survivalGap,difficulty,
  players:Object.entries(mpPlayers).map(([id,a])=>({id,...mpPackActor(a)})),
- enemies:enemies.map(e=>{const r={...e};delete r.navTarget;delete r.detour;delete r.stuck;return r}),
- shots:shots.map(s=>({...s})),powerPickups:powerPickups.map(d=>({...d})),effects:effects.map(e=>({...e})),
- floaters:floaters.slice(-20).map(f=>({...f})),sharkDebris:sharkDebris.map(d=>({...d}))};
+ enemies:enemies.map(e=>mpVisualFields(e,MP_ENEMY_FIELDS)),
+ shots:shots.map(e=>mpVisualFields(e,MP_SHOT_FIELDS)),
+ powerPickups:powerPickups.map(d=>({...d})),effects:effects.map(e=>({...e})),
+ floaters:floaters.slice(-15).map(f=>({...f})),sharkDebris:sharkDebris.map(d=>({...d}))};
 }
-function mpBroadcast(){if(mpStarted&&mpIsHost&&p)mpSend('state',{data:mpBuildSnapshot()});}
+let mpLastSentAt=0;
+function mpBroadcast(){
+ if(!mpStarted||!mpIsHost||!p||!mpSocket||mpSocket.readyState!==WebSocket.OPEN)return;
+ // More frequent small snapshots for ordinary fights. Ease up during huge hordes.
+ const count=enemies.length+shots.length,interval=state==='playing'?(count>340?145:count>210?115:count>100?90:70):400;
+ const now=performance.now();if(now-mpLastSentAt<interval||mpSocket.bufferedAmount>160000)return;
+ mpLastSentAt=now;mpSend('state',{data:mpBuildSnapshot()});
+}
+// Guest-only rendering interpolation: visuals move between snapshots; all collisions
+// and damage remain authoritative on the hosting player's computer.
+function mpVisualPosition(obj){
+ if(!mpStarted||mpIsHost||!obj||!obj._netTime)return {x:obj.x,y:obj.y};
+ const duration=Math.max(85,Math.min(170,mpObservedInterval||115));
+ const t=clamp((performance.now()-obj._netTime)/duration,0,1);
+ return {x:lerp(obj._netFromX,obj.x,t),y:lerp(obj._netFromY,obj.y,t)};
+}
+function mpStoreVisual(old,entry,now){
+ const pos=old?mpVisualPosition(old):{x:entry.x,y:entry.y};
+ entry._netFromX=pos.x;entry._netFromY=pos.y;entry._netTime=now;
+ return entry;
+}
+let mpObservedInterval=115,mpLastArrivalAt=0;
+// Immediate local visual prediction makes guest WASD movement responsive even while
+// waiting for the host's authoritative response. Large corrections stay bounded.
+function mpPredictLocal(dt){
+ if(!mpStarted||mpIsHost||mpRecovering||mpHostOffline||state!=='playing'||!p)return;
+ if(!Number.isFinite(p.visualX))p.visualX=p.x;
+ if(!Number.isFinite(p.visualY))p.visualY=p.y;
+ let mx=(keys.has('d')||keys.has('arrowright')?1:0)-(keys.has('a')||keys.has('arrowleft')?1:0)+joy.x;
+ let my=(keys.has('s')||keys.has('arrowdown')?1:0)-(keys.has('w')||keys.has('arrowup')?1:0)+joy.y;
+ const mag=Math.hypot(mx,my),norm=Math.max(1,mag);mx/=norm;my/=norm;
+ const vel=(215+speedBonus(p.up.speed))*p.ch.speed*(boostActive(p,'speed')?1.18:1)*(p.dashTime>0?3.65:1);
+ const visual={x:p.visualX,y:p.visualY,r:p.r};
+ if(!p.downed)moveSolid(visual,mx*vel*dt,my*vel*dt);
+ const gap=dist(visual.x,visual.y,p.x,p.y);
+ const correction=gap>150?.35:gap>60?.10:mag<.1?.085:gap>26?.025:0;
+ p.visualX=lerp(visual.x,p.x,correction);p.visualY=lerp(visual.y,p.y,correction);
+ p.moving=mag;p.walkTime=(p.walkTime||0)+mag*(p.dashTime>0?22:12)*dt;
+}
 function mpApplySnapshot(snapshot){
  if(!mpStarted||mpIsHost||!snapshot||!Array.isArray(snapshot.players))return;
  const before=state,oldLevel=level,oldCleared=cleared;
  level=snapshot.level;wave=snapshot.wave;cleared=snapshot.cleared;score=snapshot.score||0;kills=snapshot.kills||0;combo=snapshot.combo||0;bossRushMode=!!snapshot.bossRushMode;endlessMode=!!snapshot.endlessMode;difficulty=DIFFICULTIES[snapshot.difficulty]?snapshot.difficulty:'normal';survivalWave=Math.max(1,Number(snapshot.survivalWave)||1);survivalGap=Number(snapshot.survivalGap)||0;if(endlessMode)checkEndlessBadges();
  if(!p||oldLevel!==level)makeBackground();
- const updated={};for(const entry of snapshot.players){let a=mpPlayers[entry.id]||{};const hero=C[entry.hero]||C[0];Object.assign(a,entry,{ch:hero});updated[entry.id]=a;}
+ const now=performance.now();if(mpLastArrivalAt){const gap=now-mpLastArrivalAt;if(gap>30&&gap<600)mpObservedInterval=lerp(mpObservedInterval,gap,.18);}mpLastArrivalAt=now;
+ const updated={};for(const entry of snapshot.players){let a=mpPlayers[entry.id]||{};const hero=C[entry.hero]||C[0];
+   const oldPos=entry.id!==mpSelfId&&Number.isFinite(a.x)?mpVisualPosition(a):null;
+   const selfX=a.visualX,selfY=a.visualY;
+   Object.assign(a,entry,{ch:hero});
+   if(entry.id===mpSelfId){a.visualX=Number.isFinite(selfX)?selfX:entry.x;a.visualY=Number.isFinite(selfY)?selfY:entry.y;}
+   else if(oldPos){a._netFromX=oldPos.x;a._netFromY=oldPos.y;a._netTime=now;}
+   else{a._netFromX=entry.x;a._netFromY=entry.y;a._netTime=now;}
+   updated[entry.id]=a;}
  mpPlayers=updated;p=mpPlayers[mpSelfId]||p;if(difficulty==='insanity'&&p&&(p.revives||0)>=3)awardDiff('insanity_medic');
  const prev=Object.fromEntries(enemies.filter(e=>e.netId).map(e=>[e.netId,e]));
- enemies=snapshot.enemies.map(e=>{const old=prev[e.netId];if(old){e.renderX=old.renderX??old.x;e.renderY=old.renderY??old.y;}return e});
- const oldShots=Object.fromEntries(shots.filter(s=>s.netId).map(s=>[s.netId,s]));shots=(snapshot.shots||[]).map(s=>{const o=oldShots[s.netId];if(o){s.renderX=o.renderX??o.x;s.renderY=o.renderY??o.y;}return s;});powerPickups=snapshot.powerPickups||[];effects=snapshot.effects||[];floaters=snapshot.floaters||[];sharkDebris=snapshot.sharkDebris||[];
+ enemies=snapshot.enemies.map(e=>mpStoreVisual(prev[e.netId],e,now));
+ const oldShots=Object.fromEntries(shots.filter(s=>s.netId).map(s=>[s.netId,s]));
+ shots=(snapshot.shots||[]).map(s=>mpStoreVisual(oldShots[s.netId],s,now));
+ powerPickups=snapshot.powerPickups||[];effects=snapshot.effects||[];floaters=snapshot.floaters||[];sharkDebris=snapshot.sharkDebris||[];
  spawnQueue=Array(Math.min(300,snapshot.remaining||0)).fill(null);
  const next=snapshot.state;if(next!==before){if(next==='victory'&&!endlessMode&&!bossRushMode){awardCampaignChallenges(p);}state=next;showScreen(next==='playing'||next==='waveBreak'||next==='bossVictory'?'none':next==='shop'?'shop':next==='paused'?'pausePanel':next==='victory'||next==='gameover'?'endPanel':'menu');
    if(next==='shop'){$('nextWaveBtn').disabled=true;$('nextWaveBtn').textContent='WAITING FOR HOST TO START NEXT WAVE';$('shopTip').textContent='Upgrade your own character. Your host starts the next wave.';mpShopKey='';}
@@ -1897,10 +1968,12 @@ function mpApplySnapshot(snapshot){
  if(next==='playing'&&p){hudTick=0;}
  updateBossHud();mpRenderTeam();
 }
-function mpRenderTeam(){
+let mpLastTeamRender=0;
+function mpRenderTeam(force=false){
  const team=$('coopTeam');if(!mpStarted){team.hidden=true;return;}team.hidden=false;
- team.replaceChildren();const head=document.createElement('div');head.textContent='CO-OP · '+mpRoom+' · '+(mpRoster.length)+' / 4';head.style.color='#9fffe6';team.append(head);
- for(const member of mpRoster){const actor=mpPlayers[member.id],line=document.createElement('div');const hp=actor?Math.ceil(actor.hp):'…';line.className=actor&&actor.downed?'low':'';line.textContent=(actor&&actor.downed?'✖ ':'● ')+member.name+' ('+C[member.hero].name+') · '+hp+' HP';team.append(line);}
+ const now=performance.now();if(!force&&now-mpLastTeamRender<350)return;mpLastTeamRender=now;
+ team.replaceChildren();const head=document.createElement('div');head.textContent='CO-OP · '+mpRoom+' · '+(mpRoster.length)+' / 4 · '+(mpIsHost?'HOST':'PING '+(mpRttMs||'…')+'ms')+' · '+Math.round(mpFps)+' FPS'+(!mpIsHost?' · '+Math.round(mpKbps)+' KB/s':'');head.style.color='#9fffe6';team.append(head);
+ for(const member of mpRoster){const actor=mpPlayers[member.id],line=document.createElement('div');const hp=actor?Math.ceil(actor.hp):'…';line.className=actor&&actor.downed?'low':'';line.textContent=(member.connected===false?'⌛ ':'● ')+member.name+' ('+C[member.hero].name+') · '+hp+' HP'+(member.connected===false?' · RECONNECTING':'');team.append(line);}
  const hint=document.createElement('div');hint.style.color='#bac9d6';hint.textContent='Hold R near a downed teammate to revive';team.append(hint);
 }
 function mpSetMatchUI(){$('coopPanel').hidden=true;$('coopOpen').hidden=true;$('coopExit').hidden=false;mpRenderTeam();}
@@ -1908,25 +1981,50 @@ function mpHostBuy(id,item){
  const actor=mpPlayers[id],it=SHOP.find(q=>q.id===item);if(state!=='shop'||!canBuy(actor,it))return;upgradeActor(actor,it);mpBroadcast();
 }
 function mpLeave(){
- if(mpRoom)mpSend('leave');mpRoom='';mpMatchMode='campaign';mpStarted=false;mpEnabled=false;mpIsHost=false;mpPlayers={};mpRoster=[];mpInput={};
+ if(mpRoom)mpSend('leave');if(mpRetryTimer)clearTimeout(mpRetryTimer);mpRetryTimer=null;mpRecovering=false;mpHostOffline=false;mpReconnectAttempts=0;mpNetHide();mpRoom='';mpMatchMode='campaign';mpStarted=false;mpEnabled=false;mpIsHost=false;mpPlayers={};mpRoster=[];mpInput={};
  const original=$('coopSetup');original.append($('coopMode').closest('label'),$('coopDifficulty').closest('label'));$('coopTeam').hidden=true;$('coopExit').hidden=true;$('coopOpen').hidden=false;$('coopInRoom').hidden=true;$('coopSetup').hidden=false;$('coopCreate').hidden=false;$('coopJoin').hidden=false;$('coopCode').hidden=false;$('coopPanel').hidden=true;$('nextWaveBtn').disabled=false;$('nextWaveBtn').textContent='LAUNCH NEXT WAVE ▶';mpShopKey='';$('againBtn').disabled=false;$('againBtn').textContent='TRY AGAIN ▶';
  if(state!=='menu'){state='menu';p=null;showScreen('menu');makeHeroes();}showGateway();
 }
 function mpNotice(message){$('coopNotice').textContent=String(message||'');}
 function mpConnect(){
  if(mpSocket&&(mpSocket.readyState===WebSocket.OPEN||mpSocket.readyState===WebSocket.CONNECTING))return;
- mpSocket=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
- mpSocket.onopen=()=>{mpNotice('Connected. Create a room or join a friend.');};
+ const socket=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
+ mpSocket=socket;
+ socket.onopen=()=>{mpLastPong=Date.now();if(mpRecovering&&mpRoom){mpNetShow('CONNECTION RESTORED — REJOINING YOUR SQUAD…');mpSend('resume',{room:mpRoom,token:mpSessionToken});}else mpNotice('Connected. Create a room or join a friend.');};
  mpSocket.onmessage=event=>{
+  if(typeof event.data==='string')mpInboundBytes+=event.data.length;
+  const now=performance.now();if(now-mpMeterStart>=1500){mpKbps=mpInboundBytes/(1024*((now-mpMeterStart)/1000));mpInboundBytes=0;mpMeterStart=now;}
   let m;try{m=JSON.parse(event.data)}catch{return}
-  if(m.type==='hello'){mpSelfId=m.id;return;}
+  if(m.type==='hello'){if(!mpRecovering)mpSelfId=m.id;return;}
+  if(m.type==='pong'){mpLastPong=Date.now();if(m.echo)mpRttMs=Math.max(0,Math.round((Date.now()-m.echo)));return;}
+  if(m.type==='resume_failed'){
+   mpRecovering=false;mpNetShow('RECONNECTION EXPIRED — YOUR OLD ROOM IS NO LONGER AVAILABLE.');
+   mpLeave();$('coopPanel').hidden=false;mpNotice(m.reason+' Create or join a new room.');return;
+  }
+  if(m.type==='resumed'){
+   mpSelfId=m.id;mpHostId=m.hostId;mpRoom=m.room;mpRoster=m.members;mpIsHost=m.hostId===m.id;
+   if(DIFFICULTIES[m.difficulty])difficulty=m.difficulty;if(m.matchMode)mpMatchMode=m.matchMode;
+   mpEnabled=true;mpRecovering=false;mpHostOffline=!mpIsHost&&m.members.find(a=>a.id===m.hostId)?.connected===false;mpReconnectAttempts=0;
+   if(mpRetryTimer)clearTimeout(mpRetryTimer);mpRetryTimer=null;
+   if(mpHostOffline)mpNetShow('HOST RECONNECTING — INVASION PAUSED (UP TO 2 MINUTES)');else mpNetHide();
+   if(mpStarted){mpSetMatchUI();if(mpIsHost)mpBroadcast();else mpSend('resync');mpRenderTeam();}
+   else mpRenderLobby();
+   mpNotice('Successfully reconnected to room '+mpRoom+'.');return;
+  }
+  if(m.type==='peer_status'){
+   const member=mpRoster.find(a=>a.id===m.id);if(member)member.connected=!!m.online;
+   if(m.id===mpHostId&&!mpIsHost){mpHostOffline=!m.online;if(mpHostOffline)mpNetShow('HOST RECONNECTING — INVASION PAUSED (UP TO 2 MINUTES)');else mpNetHide();}
+   if(mpStarted)mpRenderTeam();return;
+  }
+  if(m.type==='host_resumed'){mpHostOffline=false;if(!mpRecovering)mpNetHide();return;}
+  if(m.type==='resync_request'&&mpIsHost&&mpStarted){mpBroadcast();return;}
   if(m.type==='error'){mpNotice(m.message);return;}
   if(m.type==='left')return;
   if(m.type==='roster'){
    if(DIFFICULTIES[m.difficulty])difficulty=m.difficulty;if(m.matchMode)mpMatchMode=m.matchMode;
    mpRoom=m.room;mpEnabled=true;mpHostId=m.hostId;mpIsHost=m.hostId===mpSelfId;mpRoster=m.members;
    const me=m.members.find(a=>a.id===mpSelfId);if(me&&selection!==me.hero){selection=me.hero;makeHeroes();}
-   $('coopSetup').hidden=true;$('coopInRoom').hidden=false;$('coopRoomCode').textContent=mpRoom;mpRenderLobby();return;
+   if(mpStarted){if(!mpIsHost){mpHostOffline=mpRoster.find(a=>a.id===mpHostId)?.connected===false;if(mpHostOffline)mpNetShow('HOST RECONNECTING — INVASION PAUSED (UP TO 2 MINUTES)');else if(!mpRecovering)mpNetHide();}mpRenderTeam();return;}$('coopSetup').hidden=true;$('coopInRoom').hidden=false;$('coopRoomCode').textContent=mpRoom;mpRenderLobby();return;
   }
   if(m.type==='start'){
    mpMatchMode=m.mode==='endless'?'endless':'campaign';difficulty=DIFFICULTIES[m.difficulty]?m.difficulty:'normal';mpRoster=m.members;mpHostId=m.hostId;mpIsHost=m.hostId===mpSelfId;mpStarted=true;mpEnabled=true;
@@ -1938,10 +2036,18 @@ function mpConnect(){
   if(m.type==='state'&&!mpIsHost&&mpStarted){mpApplySnapshot(m.data);return;}
   if(m.type==='departed'&&mpIsHost){delete mpPlayers[m.id];delete mpInput[m.id];mpBroadcast();return;}
   if(m.type==='score_saved'){mpNotice(m.ok?'Survival score posted to leaderboard!':'Score submission failed — keep a screenshot.');return;}
-  if(m.type==='closed'){mpNotice(m.reason);mpLeave();$('coopPanel').hidden=false;return;}
+  if(m.type==='closed'){const reason=m.reason;mpLeave();$('coopPanel').hidden=false;mpNotice(reason);return;}
  };
- mpSocket.onclose=()=>{if(mpEnabled||mpRoom){mpLeave();$('coopPanel').hidden=false;mpNotice('Connection lost. If Render was sleeping, reload this page and create a new room.');}else mpNotice('Connection failed. Make sure you opened the game through your Render web address or local Node server.');mpSocket=null;};
- mpSocket.onerror=()=>mpNotice('Connection error. Check your internet and reload.');
+ socket.onclose=()=>{
+  if(mpSocket!==socket)return;
+  mpSocket=null;
+  if(mpEnabled&&mpRoom){
+    mpRecovering=true;
+    mpNetShow('CONNECTION LOST — RECONNECTING AUTOMATICALLY. KEEP THIS TAB OPEN.');
+    mpScheduleReconnect();
+  }else mpNotice('Connection failed. Check your internet connection and try again.');
+ };
+ socket.onerror=()=>{if(mpEnabled&&mpRoom)mpNetShow('NETWORK INTERRUPTED — RETRYING CONNECTION…');else mpNotice('Connection error. Check your internet.');};
 }
 function mpRenderFighters(){const hero=$('coopHero'),box=$('coopFighters');box.replaceChildren();const taken=new Set(mpRoster.filter(m=>m.id!==mpSelfId).map(m=>m.hero));C.forEach((ch,i)=>{const b=document.createElement('button');b.type='button';b.textContent=ch.name;b.className=i===Number(hero.value)?'selected':'';b.disabled=taken.has(i);b.onclick=()=>{hero.value=String(i);hero.onchange()};box.append(b)})}
 function mpRenderLobby(){
@@ -1959,8 +2065,8 @@ function mpInitUI(){
  const q=new URLSearchParams(location.search).get('room');if(q)$('coopCode').value=q.trim().slice(0,6).toUpperCase();
  $('coopOpen').onclick=chooseMulti;
  $('coopClose').onclick=()=>{$('coopPanel').hidden=true;if(!mpStarted)showGateway()};
- $('coopCreate').onclick=()=>{mpConnect();if(!mpSocket||mpSocket.readyState!==WebSocket.OPEN){mpNotice('Connecting. Click Create again when connected.');return;}mpSend('create',{name:$('coopName').value,hero:Number(hero.value)});};
- $('coopJoin').onclick=()=>{mpConnect();if(!mpSocket||mpSocket.readyState!==WebSocket.OPEN){mpNotice('Connecting. Click Join again when connected.');return;}mpSend('join',{name:$('coopName').value,hero:Number(hero.value),room:$('coopCode').value});};
+ $('coopCreate').onclick=()=>{mpConnect();if(!mpSocket||mpSocket.readyState!==WebSocket.OPEN){mpNotice('Connecting. Click Create again when connected.');return;}mpSend('create',{name:$('coopName').value,hero:Number(hero.value),token:mpSessionToken});};
+ $('coopJoin').onclick=()=>{mpConnect();if(!mpSocket||mpSocket.readyState!==WebSocket.OPEN){mpNotice('Connecting. Click Join again when connected.');return;}mpSend('join',{name:$('coopName').value,hero:Number(hero.value),room:$('coopCode').value,token:mpSessionToken});};
  hero.onchange=()=>{selection=Number(hero.value);if(mpRoom)mpSend('select',{hero:selection});else makeHeroes();mpRenderFighters();};
  
  $('coopReady').onclick=()=>{const me=mpRoster.find(a=>a.id===mpSelfId);mpSend('ready',{ready:!(me&&me.ready)});};
@@ -1972,11 +2078,15 @@ function mpInitUI(){
   const my=(keys.has('s')||keys.has('arrowdown')?1:0)-(keys.has('w')||keys.has('arrowup')?1:0)+joy.y;
   const aim=p?getAim():0;mpSend('input',{mx,my,aim,fire:attackHeld||keys.has('j')||keys.has('enter'),revive:keys.has('r'),special:mpPulse.special,dash:mpPulse.dash});mpPulse.special=false;mpPulse.dash=false;
  },45);
- setInterval(mpBroadcast,95);
- setInterval(()=>{if(mpSocket&&mpSocket.readyState===WebSocket.OPEN)mpSend('ping')},25000);
+ setInterval(mpBroadcast,40);
+ setInterval(()=>{
+  if(!mpSocket||mpSocket.readyState!==WebSocket.OPEN)return;
+  if(mpEnabled&&mpRoom&&Date.now()-mpLastPong>42000){mpNetShow('NETWORK STALLED — RECONNECTING…');mpSocket.close();return;}
+  mpSend('ping',{t:Date.now()});
+ },6000);
 }
 
-let last=performance.now();function loop(now){let dt=Math.min(.033,(now-last)/1000);last=now;tick(dt);draw();requestAnimationFrame(loop)}requestAnimationFrame(loop);
+let last=performance.now();function loop(now){let dt=Math.min(.033,(now-last)/1000);last=now;mpFrameCount++;if(now-mpFpsStart>1000){mpFps=mpFrameCount*1000/(now-mpFpsStart);mpFrameCount=0;mpFpsStart=now;}tick(dt);mpPredictLocal(dt);draw();requestAnimationFrame(loop)}requestAnimationFrame(loop);
 // UI actions
 $('gateSolo').onclick=chooseSolo;$('gateMulti').onclick=chooseMulti;$('soloDifficulty').onchange=()=>{difficulty=$('soloDifficulty').value};$('returnGateway').onclick=showGateway;$('startBtn').onclick=()=>newGame('campaign');$('endlessBtn').onclick=()=>{if(mpRoom)mpLeave();newGame('endless')};$('leaderboardBtn').onclick=()=>survivalOpenBoard('menu');$('endScoresBtn').onclick=()=>survivalOpenBoard('endPanel');$('survivalRefresh').onclick=survivalLoadBoard;$('survivalBoardMode').onchange=survivalLoadBoard;$('survivalBoardBack').onclick=()=>{showScreen(survivalBoardReturn);if(mpStarted)mpRenderTeam()};$('survivalBoardPlay').onclick=()=>{if(mpStarted){if(mpIsHost){mpMatchMode='endless';mpHostStart(mpRoster);}else showScreen('endPanel');}else{if(mpRoom)mpLeave();newGame('endless')}};$('bossRushBtn').onclick=()=>{if(mpRoom)mpLeave();startBossRush()};$('nextWaveBtn').onclick=startWave;$('againBtn').onclick=()=>{if(mpStarted){if(mpIsHost)mpHostStart(mpRoster);return;}newGame(endlessMode?'endless':'campaign')};$('menuFromEnd').onclick=()=>{if(mpRoom)mpLeave();state='menu';p=null;showScreen('menu');makeHeroes();showGateway()};$('menuFromPause').onclick=()=>{if(mpRoom)mpLeave();state='menu';p=null;showScreen('menu');makeHeroes();showGateway()};$('btnPause').onclick=togglePause;$('btnSound').onclick=toggleSound;$('resumeBtn').onclick=()=>{if(mpStarted&&!mpIsHost)return;state='playing';showScreen('none')};function togglePause(){if(mpStarted&&!mpIsHost)return;if(state==='playing'){state='paused';attackHeld=false;showScreen('pausePanel')}else if(state==='paused'){state='playing';showScreen('none')}}
 window.addEventListener('keydown',e=>{let k=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright',' ','space','enter'].includes(k))e.preventDefault();keys.add(k);if(e.repeat)return;if(k==='p'||k==='escape')togglePause();if(k==='m'){toggleSound();return}if(state!=='playing')return;if(k==='c'){auto=!auto;announce(auto?'AUTO FIRE: ON':'AUTO FIRE: OFF','',.6)}if(k==='e'||k==='k')specials();if(k===' '||k==='shift')dash()});window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));window.addEventListener('blur',()=>{keys.clear();attackHeld=false;joy.x=joy.y=0;if(state==='playing')togglePause()});
