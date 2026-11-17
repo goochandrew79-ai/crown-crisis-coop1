@@ -11,6 +11,9 @@ const PORT = Number(process.env.PORT || 3000);
 const rooms = new Map();
 const clients = new Map();
 let nextId = 0;
+// V34: short outages must not eject a fighter from a long Endless run.
+// Rooms are still ephemeral: a Render restart or a lost host browser can't restore a match.
+const RECONNECT_GRACE_MS = 120000;
 
 // Endless Survival hall of fame. Memory works with zero setup; optionally use
 // free Upstash Redis REST for storage that survives Render free-service restarts.
@@ -77,7 +80,7 @@ function encodeFrame(payload, opcode=1) {
   return Buffer.concat([head,data]);
 }
 function send(client, obj) {
-  if (!client || client.socket.destroyed) return;
+  if (!client || !client.socket || client.socket.destroyed) return;
   try {
     const str=JSON.stringify(obj);
     if (client.socket.writableLength > 1000000) return; // drop a slow spectator frame
@@ -85,27 +88,55 @@ function send(client, obj) {
   } catch {}
 }
 function relayRaw(client, str){
-  if(!client||client.socket.destroyed||client.socket.writableLength>1000000)return;
+  if(!client||!client.socket||client.socket.destroyed||client.socket.writableLength>180000)return;
   try {client.socket.write(encodeFrame(str));}catch{}
 }
 function notify(room, obj, except) {for(const c of room.members.values())if(c!==except)send(c,obj);}
-function roster(room){return {type:'roster',room:room.code,hostId:room.hostId,started:room.started,difficulty:room.difficulty||'normal',matchMode:room.mode,members:[...room.members.values()].map(c=>({id:c.id,name:c.name,hero:c.hero,ready:c.ready}))};}
+function roster(room){return {type:'roster',room:room.code,hostId:room.hostId,started:room.started,difficulty:room.difficulty||'normal',matchMode:room.mode,members:[...room.members.values()].map(c=>({id:c.id,name:c.name,hero:c.hero,ready:c.ready,connected:c.connected!==false}))};}
 function broadcastRoster(room){notify(room,roster(room));}
 function randomCode(){let code;do{code=crypto.randomBytes(4).toString('hex').slice(0,6).toUpperCase()}while(rooms.has(code));return code;}
 function nameText(s){return typeof s==='string'?s.replace(/[<>\x00-\x1f]/g,'').trim().slice(0,18)||'Operative':'Operative'}
 function chooseHero(room,wanted,self){const taken=new Set([...room.members.values()].filter(c=>c!==self).map(c=>c.hero));let w=Number.isInteger(wanted)?wanted:0;if(w>=0&&w<8&&!taken.has(w))return w;for(let i=0;i<8;i++)if(!taken.has(i))return i;return 0}
 function leaveRoom(c){
   const room=c.room;if(!room)return;
+  clearTimeout(c.reconnectTimer);c.reconnectTimer=null;
   room.members.delete(c.id);c.room=null;c.ready=false;
   if(room.hostId===c.id){rooms.delete(room.code);for(const other of room.members.values()){other.room=null;other.ready=false;send(other,{type:'closed',reason:'The host left. The match has ended.'});}room.members.clear();}
   else{notify(room,{type:'departed',id:c.id});broadcastRoster(room);if(!room.members.size)rooms.delete(room.code);}
 }
 function handle(c,msg){
   if (!msg || typeof msg!=='object'||typeof msg.type!=='string')return;
+  if(msg.type==='ping'){send(c,{type:'pong',at:Date.now(),echo:Number(msg.t)||0});return;}
+  if(msg.type==='resume'){
+    const code=String(msg.room||'').trim().toUpperCase();
+    const token=typeof msg.token==='string'?msg.token:'';
+    const room=rooms.get(code);
+    const prior=room&&[...room.members.values()].find(member=>member.resumeToken&&member.resumeToken===token);
+    if(!prior){send(c,{type:'resume_failed',reason:'Reconnection window expired, the room was lost, or this tab has a different session token.'});return;}
+    const tempId=c.id,oldSocket=prior.socket;
+    clearTimeout(prior.reconnectTimer);prior.reconnectTimer=null;
+    clients.delete(tempId);
+    c.id=prior.id;c.name=prior.name;c.hero=prior.hero;c.ready=prior.ready;
+    c.room=room;c.resumeToken=prior.resumeToken;c.connected=true;
+    room.members.set(c.id,c);clients.set(c.id,c);
+    prior.room=null;
+    // A broken network link can leave the old TCP session half-open. Allow the
+    // holder of the same cryptographic session token to take over the slot.
+    if(oldSocket&&!oldSocket.destroyed)oldSocket.destroy();
+    send(c,{type:'resumed',id:c.id,hostId:room.hostId,room:room.code,started:room.started,matchMode:room.mode,difficulty:room.difficulty,members:roster(room).members});
+    notify(room,{type:'peer_status',id:c.id,online:true});
+    broadcastRoster(room);
+    if(room.started){
+      if(c.id===room.hostId)notify(room,{type:'host_resumed'});
+      else send(room.members.get(room.hostId),{type:'resync_request',id:c.id});
+    }
+    console.log('[resume]',room.code,c.id,c.name,'members',room.members.size);
+    return;
+  }
   if(msg.type==='create'){
     if(c.room)leaveRoom(c);
     if(rooms.size>=150){send(c,{type:'error',message:'Server is at room capacity.'});return;}
-    c.name=nameText(msg.name);c.hero=Number.isInteger(msg.hero)&&msg.hero>=0&&msg.hero<8?msg.hero:0;c.ready=true;
+    c.resumeToken=typeof msg.token==='string'&&msg.token.length>=24&&msg.token.length<=128?msg.token:crypto.randomUUID();c.name=nameText(msg.name);c.hero=Number.isInteger(msg.hero)&&msg.hero>=0&&msg.hero<8?msg.hero:0;c.ready=true;
     const code=randomCode(),room={code,hostId:c.id,members:new Map([[c.id,c]]),started:false,mode:'campaign',difficulty:'normal',runSubmitted:false};rooms.set(code,room);c.room=room;
     broadcastRoster(room);return;
   }
@@ -115,7 +146,7 @@ function handle(c,msg){
     if(!room){send(c,{type:'error',message:'Room not found. Check the six-character code.'});return;}
     if(room.started){send(c,{type:'error',message:'That match has started. Join a new lobby.'});return;}
     if(room.members.size>=4){send(c,{type:'error',message:'That room already has four players.'});return;}
-    c.name=nameText(msg.name);c.hero=chooseHero(room,msg.hero,c);c.ready=false;c.room=room;room.members.set(c.id,c);broadcastRoster(room);return;
+    c.resumeToken=typeof msg.token==='string'&&msg.token.length>=24&&msg.token.length<=128?msg.token:crypto.randomUUID();c.name=nameText(msg.name);c.hero=chooseHero(room,msg.hero,c);c.ready=false;c.room=room;room.members.set(c.id,c);broadcastRoster(room);return;
   }
   const room=c.room;
   if(!room)return;
@@ -151,7 +182,7 @@ function handle(c,msg){
   if(msg.type==='state'&&c.id===room.hostId){
     if(!msg.data||typeof msg.data!=='object')return;
     const now=Date.now();if(now-c.lastState<55)return;c.lastState=now;
-    const str=JSON.stringify({type:'state',data:msg.data});if(str.length>700000)return;
+    const str=JSON.stringify({type:'state',data:msg.data});if(str.length>450000)return;
     for(const peer of room.members.values())if(peer!==c)relayRaw(peer,str);
   }
 }
@@ -162,9 +193,27 @@ server.on('upgrade',(req,socket,head)=>{
     if(!req.headers.upgrade||req.headers.upgrade.toLowerCase()!=='websocket'||!key||typeof key!=='string'||Buffer.from(key,'base64').length!==16)throw Error('handshake');
     const accept=crypto.createHash('sha1').update(key+'258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
     socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: '+accept+'\r\n\r\n');
-    const c={id:'p'+(++nextId),socket,name:'Operative',hero:0,ready:false,room:null,lastInput:0,lastState:0,buffer:Buffer.alloc(0)};
+    const c={id:'p'+(++nextId),socket,name:'Operative',hero:0,ready:false,connected:true,resumeToken:null,room:null,lastInput:0,lastState:0,lastPong:Date.now(),buffer:Buffer.alloc(0)};
     clients.set(c.id,c);send(c,{type:'hello',id:c.id});
-    const close=()=>{if(!clients.has(c.id))return;clients.delete(c.id);leaveRoom(c);};
+    const close=()=>{
+      // Guard against late close events from an old socket after a successful resume.
+      if(clients.get(c.id)!==c)return;
+      clients.delete(c.id);
+      const room=c.room;
+      if(!room)return;
+      if(!room.started){leaveRoom(c);return;}
+      c.connected=false;c.socket=null;c.lastDisconnectedAt=Date.now();
+      notify(room,{type:'peer_status',id:c.id,online:false,graceMs:RECONNECT_GRACE_MS});
+      broadcastRoster(room);
+      c.reconnectTimer=setTimeout(()=>{
+        if(room.members.get(c.id)===c&&!c.connected){
+          console.log('[expired]',room.code,c.id);
+          leaveRoom(c);
+        }
+      },RECONNECT_GRACE_MS);
+      c.reconnectTimer.unref?.();
+      console.log('[disconnected, reserving seat]',room.code,c.id);
+    };
     socket.on('close',close);socket.on('end',close);socket.on('error',close);
     function consume(chunk){
       c.buffer=Buffer.concat([c.buffer,chunk]);
@@ -180,6 +229,7 @@ server.on('upgrade',(req,socket,head)=>{
         for(let i=0;i<len;i++)payload[i]^=mask[i%4];
         if(opcode===8){socket.end(encodeFrame('',8));return;}
         if(opcode===9){socket.write(encodeFrame(payload,10));continue;}
+        if(opcode===10){c.lastPong=Date.now();continue;}
         if(opcode!==1)continue;
         try{handle(c,JSON.parse(payload.toString('utf8')));}catch{}
       }
@@ -188,4 +238,11 @@ server.on('upgrade',(req,socket,head)=>{
     socket.on('data',consume);
   }catch{socket.destroy();}
 });
+setInterval(()=>{
+  for(const c of clients.values()){
+    if(!c.socket||c.socket.destroyed)continue;
+    if(Date.now()-c.lastPong>75000){c.socket.destroy();continue;}
+    if(c.socket.writableLength<300000)try{c.socket.write(encodeFrame('',9));}catch{}
+  }
+},22000).unref?.();
 server.listen(PORT,'0.0.0.0',()=>console.log(`CROWN//CRISIS co-op ready on http://localhost:${PORT}`));

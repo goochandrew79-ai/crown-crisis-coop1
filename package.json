@@ -1,8 +1,8 @@
 {
   "name": "crown-crisis-coop",
-  "version": "1.3.0-beta.2",
+  "version": "1.5.0-beta.1",
   "private": true,
-  "description": "CROWN//CRISIS V33: 4-player co-op, rare timed pickups, balanced endless upgrades",
+  "description": "CROWN//CRISIS V35: smoother four-player co-op interpolation, smaller snapshots, responsive input prediction and reconnection",
   "type": "commonjs",
   "engines": {
     "node": ">=18"

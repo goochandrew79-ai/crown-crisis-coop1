@@ -1,48 +1,60 @@
-# CROWN//CRISIS — BETA V33: RARE TEMPORARY POWERUPS
+# CROWN//CRISIS — V35 Smooth Multiplayer Beta
 
-This is a targeted update to V32. Keep your existing GitHub repository and Render service.
+This performance-focused update builds on V34. It retains the 15-wave Campaign, 500+ wave Endless Survival, Normal/Hard/Insanity, solo play, four-player rooms, eight unique fighters, bosses, rare pickups, shops, achievements, leaderboard, and V34's two-minute reconnect recovery.
 
-## What changed
+## What's different in V35
 
-- **Endless Survival upgrade ranks remain uncapped**, with increasing prices and diminishing bonuses. The original six primary-gun unlock tiers remain intact. Higher ranks provide small additional improvements instead of a new weapon each time.
-- After an ordinary alien dies, there is a **0.75% chance** of a temporary pickup. Bosses do not have this random drop rule.
-- Pickups must be collected by walking over them; they disappear after **8 seconds** on the ground. Up to seven can exist at once. They do not give money and do not increase permanent upgrade ranks.
-- All pickup effects last about **2.6–2.9 seconds** and do not stack multiplicatively; another pickup of the same type refreshes the timer.
+- **Lean network snapshots:** The host sends the fields guests need to render aliens and projectiles, without shipping enemy navigation, collision, targeting, and weapon-hit internals. In an artificial test with 165 aliens and 220 shots, the snapshot shrank from 101,924 characters to 58,199 (about 43%). Actual results vary by wave.
+- **Adaptive sync:** A lighter scene can receive roughly 14 host snapshots per second. Massive hordes deliberately use a slower rate so the network does not become saturated. The server relays only the newest frames when a guest's connection is congested.
+- **Smooth motion:** Guests visually interpolate enemy positions, bullets, and teammates between authoritative updates rather than jumping abruptly each time a packet arrives.
+- **Responsive guest controls:** A guest's local character starts visually moving as soon as they press WASD, then smoothly corrects toward the host-authoritative position. Collisions, health, gold, waves, and damage are still computed by the host. This is an early prediction system, not a fully lag-free netcode rewrite.
+- **Less per-frame work:** Enemy/projectile collision first rejects distant targets using a cheap bounding check; line-of-sight checks avoid temporary arrays; navigation-grid refreshes are spaced out slightly during massive hordes.
+- **Live quality display:** The multiplayer HUD displays game FPS, estimated ping on a guest, and incoming KB/s to help identify why a particular computer or connection stutters.
+- **No change to the actual game economy or difficulty.**
 
-| Pickup | Effect | Duration |
-|---|---|---|
-| Power Shot (red) | 12% more damage for friendly projectiles | 2.6 seconds |
-| Overclock (gold) | 17% faster primary fire rate | 2.6 seconds |
-| Sprint (green) | 18% faster movement | 2.7 seconds |
-| Double Dash (blue) | Two quick successive dashes | 2.9-second activation window |
+## Upload V35 to your existing GitHub / Render service
 
-In co-op, the room host chooses random drops and checks pickup collection. Only the first player to reach a pickup receives its effect. Other players see the pickup and the receiving fighter's active effect through synchronized snapshots.
+**You need to replace BOTH `server.js` and `public/index.html`.** The update won't be effective if one computer is still running the previous HTML.
 
-## Update the GitHub / Render game
+1. Download and **extract** `crown_crisis_v35_smooth_multiplayer_render.zip` on your computer. Don't upload the ZIP itself to GitHub.
+2. Open your existing repository at https://github.com/goochandrew79-ai/crown-crisis-coop1.
+3. At the root of the repository, replace **`server.js`** and **`package.json`** with the files from this update. You may replace `README.md` and `BETA_TEST_CHECKLIST.md` too.
+4. Click the **`public`** folder. Replace the existing **`index.html`** in that folder with the new **`public/index.html`** from the ZIP. Commit all changes.
+5. In https://dashboard.render.com/, open your existing Crown Crisis web service and watch the deployment. If needed, choose **Manual Deploy → Deploy latest commit**.
+6. When the deployment says **Live**, have **everyone** visit https://crown-crisis-coop.onrender.com/ and refresh using **Ctrl + Shift + R**. Start a fresh multiplayer match.
 
-1. Extract `crown_crisis_v33_powerups_render.zip`.
-2. In your existing repository **https://github.com/goochandrew79-ai/crown-crisis-coop1**, replace these files in the same locations:
+Keep exactly this layout:
 
-       crown-crisis-coop1/
-         server.js
-         package.json
-         README.md
-         public/
-           index.html
+```text
+crown-crisis-coop1/
+  server.js
+  package.json
+  README.md
+  BETA_TEST_CHECKLIST.md
+  public/
+    index.html
+```
 
-3. Commit all changes. If uploading to GitHub's website does not overwrite an existing file, open that file, use the editor, and paste the replacement content; for the large HTML file, GitHub Desktop is easier (clone → copy over → commit → push).
-4. Visit **https://dashboard.render.com/**. Wait for an automatic deployment or select **Manual Deploy → Deploy latest commit**.
-5. When status is **Live**, press **Ctrl+Shift+R** on **https://crown-crisis-coop.onrender.com/** to load the new game.
-6. Test solo and multiplayer: check red/yellow/green/blue diamonds, collect one, and look for its timer near the bottom of the game display.
+## How to read the in-game stats
 
-**Important:** This is a random feature: seeing no pickups in a short session is normal. Around 133 regular monster kills are expected per pickup on average, but randomness can vary greatly. The game needs the server for multiplayer. Opening `public/index.html` directly still supports solo play.
+- **FPS**: Frames per second on that player’s browser. Sustained values below roughly 40 point to the browser/PC struggling to render. If the HOST's FPS is low, *everyone's* simulation may be delayed because the host browser runs all enemy AI and bullet collision.
+- **PING (ms)**: Approximate round-trip time to Render. If it is regularly over 150–200 ms or fluctuates strongly, network/hosting latency is likely contributing to sluggish controls.
+- **KB/s**: Approximate inbound multiplayer traffic; it can rise during large alien hordes. It is an estimate, not a precise bandwidth meter.
 
-## Beta tests to run
+For better results, play on a stable network (wired connection is ideal), close other high-load tabs, keep the host's game tab active, and avoid streaming/screensharing from the computer running the host simulation during intense hordes.
 
-- Solo, Normal and Hard; Campaign and Endless: collect each pickup and confirm expiration.
-- Co-op: have both players approach one drop; only one player should receive the buff. Confirm the guest sees the pickup spawn and disappear.
-- Test Double Dash with two presses of Dash within 2.9 seconds.
-- Open an Endless shop with high-rank upgrades: price increases and no hard cap.
-- Verify a new wave removes uncollected pickups, and older characters/abilities still work.
+## Known limitations
 
-Additional existing V32 rules, difficulty multipliers, achievements, leaderboard and browser resizing are preserved.
+- **This improves network traffic and animations; it does not remove physical internet latency.** The host-controlled architecture still has higher response time for guests than a dedicated authoritative game server. A future major rewrite could move enemy simulation to the server with rollback/prediction.
+- A Render Free instance has limited compute/resources and may restart; the host's own computer runs the simulation. Your friends' geographic distance from the chosen Render region matters.
+- V34 reconnection handles *temporary internet interruptions*, not a full Render restart or closing/reloading the host's browser tab. Rejoin within the two-minute window, without closing the tab.
+- Snapshots remain authoritative for damage and hits. A predicted visual position can be briefly corrected if the guest and host diverge, especially during dashes or packet loss.
+
+## Local testing performed
+
+- JavaScript syntax checks for both browser game and Node server.
+- Four-player local WebSocket relay: Insanity start, three guest inputs, large state broadcast to all three, repeated state delivery, ping timing.
+- Guest/host Chromium rendering under simulated multiplayer: snapshots, local movement prediction, 165-enemy / 220-projectile stress scene, no page errors.
+- Guest and host two-minute reconnection regression tests with the same player IDs and room, resynchronization and messages after reconnect.
+
+A full public-Internet performance test on your Render account, across four real computers and hundreds of Endless waves, has **not** been run here. Use the included checklist to gather FPS, ping and wave number if problems continue.
