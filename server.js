@@ -130,7 +130,7 @@ function handle(c,msg){
       if(c.id===room.hostId)notify(room,{type:'host_resumed'});
       else send(room.members.get(room.hostId),{type:'resync_request',id:c.id});
     }
-    console.log('[resume]',room.code,c.id,c.name,'members',room.members.size);
+    console.log('[resume]',room.code,c.id,c.name,'members',room.members.size,'newConn',c.openedAt);
     return;
   }
   if(msg.type==='create'){
@@ -182,66 +182,109 @@ function handle(c,msg){
   if(msg.type==='state'&&c.id===room.hostId){
     if(!msg.data||typeof msg.data!=='object')return;
     const now=Date.now();if(now-c.lastState<55)return;c.lastState=now;
-    const str=JSON.stringify({type:'state',data:msg.data});if(str.length>450000)return;
+    const str=JSON.stringify({type:'state',data:msg.data});if(str.length>450000){if(!c.lastOversizeLog||now-c.lastOversizeLog>15000){console.warn('[state-dropped-too-large]',room.code,c.id,'chars',str.length);c.lastOversizeLog=now;}return;}
     for(const peer of room.members.values())if(peer!==c)relayRaw(peer,str);
   }
 }
+// V36: RFC6455 text continuation and control-frame support. The previous parser
+// disconnected a client whenever a long message was fragmented across frames.
+// Keep the room protocol dependency-free, but never interpret fragmentation as
+// a broken connection. Every deliberate server closure is logged with a reason.
 server.on('upgrade',(req,socket,head)=>{
   try{
     if(new URL(req.url,'http://localhost').pathname!=='/ws')throw Error('path');
     const key=req.headers['sec-websocket-key'];
     if(!req.headers.upgrade||req.headers.upgrade.toLowerCase()!=='websocket'||!key||typeof key!=='string'||Buffer.from(key,'base64').length!==16)throw Error('handshake');
     const accept=crypto.createHash('sha1').update(key+'258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+    socket.setNoDelay(true);
     socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: '+accept+'\r\n\r\n');
-    const c={id:'p'+(++nextId),socket,name:'Operative',hero:0,ready:false,connected:true,resumeToken:null,room:null,lastInput:0,lastState:0,lastPong:Date.now(),buffer:Buffer.alloc(0)};
+    const c={id:'p'+(++nextId),socket,name:'Operative',hero:0,ready:false,connected:true,resumeToken:null,room:null,lastInput:0,lastState:0,lastPong:Date.now(),buffer:Buffer.alloc(0),fragments:[],fragmentBytes:0,fragmentOpcode:0,openedAt:Date.now(),frameCount:0};
     clients.set(c.id,c);send(c,{type:'hello',id:c.id});
-    const close=()=>{
-      // Guard against late close events from an old socket after a successful resume.
+    let endCause='peer or proxy closed TCP connection',closeCode=null,closing=false;
+    function protocolClose(code,reason){
+      if(closing)return;closing=true;
+      endCause='protocol '+code+' '+reason;
+      console.warn('[ws-protocol]',c.room?.code||'-',c.id,endCause,'buffered',socket.writableLength);
+      const msg=Buffer.from(String(reason).slice(0,100)),data=Buffer.alloc(2+msg.length);
+      data.writeUInt16BE(code,0);msg.copy(data,2);
+      try{socket.end(encodeFrame(data,8));}catch{socket.destroy();}
+      const t=setTimeout(()=>socket.destroy(),1500);t.unref?.();
+    }
+    function cleanup(){
+      // An earlier connection may close AFTER its seat was resumed elsewhere.
       if(clients.get(c.id)!==c)return;
+      const held=Date.now()-c.openedAt;
+      console.log('[ws-close]',c.room?.code||'-',c.id,'ageMs',held,'code',closeCode??'-','reason',endCause,'frames',c.frameCount);
       clients.delete(c.id);
-      const room=c.room;
-      if(!room)return;
+      const room=c.room;if(!room)return;
       if(!room.started){leaveRoom(c);return;}
       c.connected=false;c.socket=null;c.lastDisconnectedAt=Date.now();
       notify(room,{type:'peer_status',id:c.id,online:false,graceMs:RECONNECT_GRACE_MS});
       broadcastRoster(room);
       c.reconnectTimer=setTimeout(()=>{
-        if(room.members.get(c.id)===c&&!c.connected){
-          console.log('[expired]',room.code,c.id);
-          leaveRoom(c);
-        }
+        if(room.members.get(c.id)===c&&!c.connected){console.log('[expired]',room.code,c.id);leaveRoom(c);}
       },RECONNECT_GRACE_MS);
       c.reconnectTimer.unref?.();
       console.log('[disconnected, reserving seat]',room.code,c.id);
-    };
-    socket.on('close',close);socket.on('end',close);socket.on('error',close);
+    }
+    socket.on('close',cleanup);
+    socket.on('end',()=>{if(!closing)endCause=closeCode?'browser sent close frame':'peer or proxy sent TCP FIN';});
+    socket.on('error',err=>{endCause='socket error '+(err?.code||err?.message||'unknown');console.warn('[ws-error]',c.room?.code||'-',c.id,endCause);});
+    function deliverText(buf){
+      try{const m=JSON.parse(buf.toString('utf8'));if(m&&typeof m.type==='string')handle(c,m)}
+      catch(err){console.warn('[ws-message]',c.room?.code||'-',c.id,'invalid JSON:',String(err.message).slice(0,90));}
+    }
     function consume(chunk){
-      c.buffer=Buffer.concat([c.buffer,chunk]);
-      while(c.buffer.length>=2){
-        const a=c.buffer[0],b=c.buffer[1],opcode=a&15,fin=(a&0x80)!==0,masked=(b&0x80)!==0;
+      if(closing||socket.destroyed)return;
+      c.buffer=c.buffer.length?Buffer.concat([c.buffer,chunk]):chunk;
+      if(c.buffer.length>1_500_000){protocolClose(1009,'Buffered WebSocket message too large');return;}
+      while(c.buffer.length>=2&&!closing){
+        const a=c.buffer[0],b=c.buffer[1],opcode=a&15,fin=!!(a&128),masked=!!(b&128),rsv=a&0x70;
         let len=b&127,offset=2;
         if(len===126){if(c.buffer.length<4)return;len=c.buffer.readUInt16BE(2);offset=4;}
-        else if(len===127){if(c.buffer.length<10)return;const big=c.buffer.readBigUInt64BE(2);if(big>BigInt(1_100_000)){socket.destroy();return;}len=Number(big);offset=10;}
-        if(!masked||!fin||len>1_100_000){socket.destroy();return;}
+        else if(len===127){
+          if(c.buffer.length<10)return;const big=c.buffer.readBigUInt64BE(2);
+          if(big>BigInt(1_200_000)){protocolClose(1009,'Frame payload too large');return;}
+          len=Number(big);offset=10;
+        }
+        if(!masked||rsv){protocolClose(1002,'Bad WebSocket masking or RSV bits');return;}
+        if(len>1_200_000){protocolClose(1009,'Frame payload too large');return;}
+        if(opcode>=8&&(!fin||len>125)){protocolClose(1002,'Invalid control frame');return;}
         if(c.buffer.length<offset+4+len)return;
         const mask=c.buffer.subarray(offset,offset+4),payload=Buffer.from(c.buffer.subarray(offset+4,offset+4+len));
-        c.buffer=c.buffer.subarray(offset+4+len);
-        for(let i=0;i<len;i++)payload[i]^=mask[i%4];
-        if(opcode===8){socket.end(encodeFrame('',8));return;}
-        if(opcode===9){socket.write(encodeFrame(payload,10));continue;}
+        c.buffer=c.buffer.subarray(offset+4+len);c.frameCount++;
+        for(let i=0;i<len;i++)payload[i]^=mask[i&3];
+        if(opcode===8){
+          closeCode=payload.length>=2?payload.readUInt16BE(0):1000;
+          const text=payload.length>2?payload.subarray(2).toString('utf8').slice(0,100):'';
+          endCause='browser close '+closeCode+' '+text;closing=true;
+          try{socket.end(encodeFrame(payload,8));}catch{socket.destroy();}
+          return;
+        }
+        if(opcode===9){try{socket.write(encodeFrame(payload,10));}catch(err){endCause='pong write failed';socket.destroy();}continue;}
         if(opcode===10){c.lastPong=Date.now();continue;}
-        if(opcode!==1)continue;
-        try{handle(c,JSON.parse(payload.toString('utf8')));}catch{}
+        if(opcode!==0&&opcode!==1){protocolClose(1003,'Unsupported WebSocket message type');return;}
+        if(opcode===1&&c.fragmentOpcode){protocolClose(1002,'New text message during fragmented message');return;}
+        if(opcode===0&&!c.fragmentOpcode){protocolClose(1002,'Unexpected continuation frame');return;}
+        if(opcode===1&&!fin){c.fragmentOpcode=1;c.fragments=[payload];c.fragmentBytes=payload.length;continue;}
+        if(opcode===0){
+          c.fragments.push(payload);c.fragmentBytes+=payload.length;
+          if(c.fragmentBytes>1_100_000){protocolClose(1009,'Fragmented message too large');return;}
+          if(fin){const full=Buffer.concat(c.fragments,c.fragmentBytes);c.fragments=[];c.fragmentBytes=0;c.fragmentOpcode=0;deliverText(full);}
+          continue;
+        }
+        // Normal, unfragmented text frame.
+        deliverText(payload);
       }
     }
     if(head.length)consume(head);
     socket.on('data',consume);
-  }catch{socket.destroy();}
+  }catch(err){console.warn('[ws-upgrade-rejected]',String(err.message).slice(0,90));socket.destroy();}
 });
 setInterval(()=>{
   for(const c of clients.values()){
     if(!c.socket||c.socket.destroyed)continue;
-    if(Date.now()-c.lastPong>75000){c.socket.destroy();continue;}
+    if(Date.now()-c.lastPong>75000){console.warn('[ws-heartbeat-timeout]',c.room?.code||'-',c.id,'lastPongMs',Date.now()-c.lastPong);c.socket.destroy();continue;}
     if(c.socket.writableLength<300000)try{c.socket.write(encodeFrame('',9));}catch{}
   }
 },22000).unref?.();
