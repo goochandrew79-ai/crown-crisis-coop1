@@ -452,13 +452,13 @@ try{best=Number(localStorage.getItem('crown_crisis_shooter_best')||0)}catch(e){}
 let mpMatchMode='campaign';let mpEnabled=false,mpStarted=false,mpIsHost=false,mpSocket=null,mpSelfId='',mpHostId='',mpRoom='',mpRoster=[],mpPlayers={},mpInput={},mpLastSnapshot=0,mpShopKey='',mpEnemySerial=0,mpShotSerial=0;
 // V34 reconnect safety: a private random token reserves the same player slot for two minutes.
 const mpSessionToken=(()=>{try{const key='crown_crisis_v34_session';let t=sessionStorage.getItem(key);if(!t||t.length<24){t=(crypto.randomUUID?crypto.randomUUID():Array.from(crypto.getRandomValues(new Uint8Array(24)),b=>b.toString(16).padStart(2,'0')).join(''));sessionStorage.setItem(key,t);}return t}catch(e){return 'client-'+Date.now()+'-'+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2)}})();
-let mpRecovering=false,mpHostOffline=false,mpRetryTimer=null,mpReconnectAttempts=0,mpLastPong=Date.now();
+let mpRecovering=false,mpHostOffline=false,mpRetryTimer=null,mpReconnectAttempts=0,mpLastPong=Date.now(),mpOpenedAt=0,mpLastCloseCode=0,mpLastCloseReason='';
 // Live diagnostics help distinguish server/network delay from low client FPS.
 let mpRttMs=0,mpFps=0,mpFrameCount=0,mpFpsStart=performance.now(),mpInboundBytes=0,mpKbps=0,mpMeterStart=performance.now();
 const mpNetworkNotice=document.createElement('div');mpNetworkNotice.id='mpNetworkNotice';mpNetworkNotice.style.cssText='position:fixed;z-index:2100;left:50%;top:14px;transform:translateX(-50%);background:#111325ef;color:#f9e3ac;border:2px solid #ffc56a;border-radius:9px;padding:10px 15px;max-width:90vw;font:bold 13px monospace;text-align:center;box-shadow:0 3px 24px #0009;pointer-events:none;display:none';document.body.append(mpNetworkNotice);
 function mpNetShow(message){mpNetworkNotice.textContent=message;mpNetworkNotice.style.display='block'}
 function mpNetHide(){mpNetworkNotice.style.display='none'}
-function mpScheduleReconnect(){if(mpRetryTimer||!mpRoom)return;const delay=Math.min(9500,1200*Math.pow(1.7,Math.min(5,mpReconnectAttempts++)));mpRetryTimer=setTimeout(()=>{mpRetryTimer=null;if(mpRecovering&&!mpSocket)mpConnect()},delay)}
+function mpScheduleReconnect(){if(mpRetryTimer||!mpRoom)return;const delay=Math.min(11000,1400*Math.pow(1.8,Math.min(5,mpReconnectAttempts++)));mpRetryTimer=setTimeout(()=>{mpRetryTimer=null;if(mpRecovering&&!mpSocket)mpConnect()},delay)}
 
 const mpPulse={special:false,dash:false};
 function mpSend(type,data={}){if(mpSocket&&mpSocket.readyState===WebSocket.OPEN){if(type==='state'&&mpSocket.bufferedAmount>150000)return;mpSocket.send(JSON.stringify({type,...data}));}}
@@ -1883,7 +1883,7 @@ function mpHostStart(members){
  members.forEach((member,index)=>{if(member.id===mpSelfId)return;const a=mpCreateActor(member.hero,WORLD.w/2+offsets[index%4][0],WORLD.h/2+offsets[index%4][1]);for(let k=0;k<20&&isSolid(a.x,a.y,a.r);k++){a.x=WORLD.w/2+(k%5-2)*58;a.y=WORLD.h/2+(Math.floor(k/5)-2)*52;}mpPlayers[member.id]=a;});
  mpSetMatchUI();mpBroadcast();announce('ONLINE CO-OP STARTED',members.length+(endlessMode?' OPERATIVES · ENDLESS SURVIVAL':' OPERATIVES · 15 WAVES'),2.5);
 }
-// V35 bandwidth pass: only network fields used for rendering are transmitted.
+// V36 bandwidth pass: only network fields used for rendering are transmitted.
 // Enemy navigation, collision timers, target caches and hit logic remain host-only.
 function mpPackActor(a){const result={...a,hero:C.indexOf(a.ch)};delete result.ch;delete result._mpAim;delete result.visualX;delete result.visualY;return result}
 const MP_ENEMY_FIELDS=['netId','type','x','y','r','hp','maxHp','elite','flash','seed','angle','slow','legs','sharkLeg','sharkWarning','sharkNovaWarn','sharkMineWarn','sharkMineTargets','sharkHint','sharkFire','sharkStomp'];
@@ -1990,7 +1990,7 @@ function mpConnect(){
  if(mpSocket&&(mpSocket.readyState===WebSocket.OPEN||mpSocket.readyState===WebSocket.CONNECTING))return;
  const socket=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
  mpSocket=socket;
- socket.onopen=()=>{mpLastPong=Date.now();if(mpRecovering&&mpRoom){mpNetShow('CONNECTION RESTORED — REJOINING YOUR SQUAD…');mpSend('resume',{room:mpRoom,token:mpSessionToken});}else mpNotice('Connected. Create a room or join a friend.');};
+ socket.onopen=()=>{mpLastPong=Date.now();mpOpenedAt=Date.now();if(mpRecovering&&mpRoom){mpNetShow('CONNECTION RESTORED — REJOINING YOUR SQUAD…');mpSend('resume',{room:mpRoom,token:mpSessionToken});}else mpNotice('Connected. Create a room or join a friend.');};
  mpSocket.onmessage=event=>{
   if(typeof event.data==='string')mpInboundBytes+=event.data.length;
   const now=performance.now();if(now-mpMeterStart>=1500){mpKbps=mpInboundBytes/(1024*((now-mpMeterStart)/1000));mpInboundBytes=0;mpMeterStart=now;}
@@ -2004,7 +2004,7 @@ function mpConnect(){
   if(m.type==='resumed'){
    mpSelfId=m.id;mpHostId=m.hostId;mpRoom=m.room;mpRoster=m.members;mpIsHost=m.hostId===m.id;
    if(DIFFICULTIES[m.difficulty])difficulty=m.difficulty;if(m.matchMode)mpMatchMode=m.matchMode;
-   mpEnabled=true;mpRecovering=false;mpHostOffline=!mpIsHost&&m.members.find(a=>a.id===m.hostId)?.connected===false;mpReconnectAttempts=0;
+   mpEnabled=true;mpRecovering=false;mpHostOffline=!mpIsHost&&m.members.find(a=>a.id===m.hostId)?.connected===false;
    if(mpRetryTimer)clearTimeout(mpRetryTimer);mpRetryTimer=null;
    if(mpHostOffline)mpNetShow('HOST RECONNECTING — INVASION PAUSED (UP TO 2 MINUTES)');else mpNetHide();
    if(mpStarted){mpSetMatchUI();if(mpIsHost)mpBroadcast();else mpSend('resync');mpRenderTeam();}
@@ -2038,16 +2038,23 @@ function mpConnect(){
   if(m.type==='score_saved'){mpNotice(m.ok?'Survival score posted to leaderboard!':'Score submission failed — keep a screenshot.');return;}
   if(m.type==='closed'){const reason=m.reason;mpLeave();$('coopPanel').hidden=false;mpNotice(reason);return;}
  };
- socket.onclose=()=>{
+ socket.onclose=(ev)=>{
   if(mpSocket!==socket)return;
+  const age=Date.now()-mpOpenedAt;
+  mpLastCloseCode=Number(ev?.code)||1006;
+  mpLastCloseReason=String(ev?.reason||'').slice(0,100);
+  console.warn('[CROWN//CRISIS connection] closed', {code:mpLastCloseCode,reason:mpLastCloseReason,connectedForMs:age,clean:!!ev?.wasClean});
+  // Only reset the retry backoff after a genuinely stable connection. Previously
+  // each 1-second resume reset it, creating the rapid Render-log reconnect loop.
+  if(age>30000)mpReconnectAttempts=0;
   mpSocket=null;
   if(mpEnabled&&mpRoom){
     mpRecovering=true;
-    mpNetShow('CONNECTION LOST — RECONNECTING AUTOMATICALLY. KEEP THIS TAB OPEN.');
+    mpNetShow('CONNECTION LOST (CODE '+mpLastCloseCode+') — RETRYING. KEEP THIS TAB OPEN.');
     mpScheduleReconnect();
-  }else mpNotice('Connection failed. Check your internet connection and try again.');
+  }else mpNotice('Connection failed (code '+mpLastCloseCode+'). Check your internet and try again.');
  };
- socket.onerror=()=>{if(mpEnabled&&mpRoom)mpNetShow('NETWORK INTERRUPTED — RETRYING CONNECTION…');else mpNotice('Connection error. Check your internet.');};
+ socket.onerror=()=>{console.warn('[CROWN//CRISIS connection] socket error');if(mpEnabled&&mpRoom)mpNetShow('NETWORK INTERRUPTED — RETRYING CONNECTION…');else mpNotice('Connection error. Check your internet.');};
 }
 function mpRenderFighters(){const hero=$('coopHero'),box=$('coopFighters');box.replaceChildren();const taken=new Set(mpRoster.filter(m=>m.id!==mpSelfId).map(m=>m.hero));C.forEach((ch,i)=>{const b=document.createElement('button');b.type='button';b.textContent=ch.name;b.className=i===Number(hero.value)?'selected':'';b.disabled=taken.has(i);b.onclick=()=>{hero.value=String(i);hero.onchange()};box.append(b)})}
 function mpRenderLobby(){
@@ -2081,7 +2088,8 @@ function mpInitUI(){
  setInterval(mpBroadcast,40);
  setInterval(()=>{
   if(!mpSocket||mpSocket.readyState!==WebSocket.OPEN)return;
-  if(mpEnabled&&mpRoom&&Date.now()-mpLastPong>42000){mpNetShow('NETWORK STALLED — RECONNECTING…');mpSocket.close();return;}
+  if(Date.now()-mpOpenedAt>30000)mpReconnectAttempts=0;
+  if(mpEnabled&&mpRoom&&Date.now()-mpLastPong>42000){mpNetShow('SERVER NOT RESPONDING (42s) — RECONNECTING…');console.warn('[CROWN//CRISIS connection] app ping timeout');mpSocket.close(4000,'Game ping timeout');return;}
   mpSend('ping',{t:Date.now()});
  },6000);
 }
