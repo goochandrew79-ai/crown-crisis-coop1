@@ -17,7 +17,7 @@ let nextId = 0;
 const REDIS_URL=(process.env.UPSTASH_REDIS_REST_URL||'').replace(/\/$/,'');
 const REDIS_TOKEN=process.env.UPSTASH_REDIS_REST_TOKEN||'';
 const boardEnabled=!!(REDIS_URL&&REDIS_TOKEN);
-const BOARD_KEY='crowncrisis:v31:survival:top100';
+const BOARD_KEY='crowncrisis:v31:survival:top100'; // Keep existing Upstash leaderboard records
 let memoryBoard=[];
 const lastPost=new Map();
 function cleanName(s){return typeof s==='string'?(s.replace(/[<>\x00-\x1f]/g,'').trim().slice(0,18)||'Operative'):'Operative'}
@@ -34,7 +34,7 @@ async function loadScores(){
   catch(err){console.error('Leaderboard storage offline:',err.message);return {entries:memoryBoard,persistent:false};}
 }
 async function saveScore(data){
-  const entry={id:String(data.id||crypto.randomUUID()).replace(/[^A-Za-z0-9_-]/g,'').slice(0,64),mode:data.mode==='coop'?'coop':'solo',name:cleanName(data.name),wave:asInt(data.wave,1,100000),cleared:asInt(data.cleared,0,100000),score:asInt(data.score,0,1e12),kills:asInt(data.kills,0,1e8),players:Array.isArray(data.players)?data.players.slice(0,4).map(cleanName):[cleanName(data.name)],at:new Date().toISOString()};
+  const entry={id:String(data.id||crypto.randomUUID()).replace(/[^A-Za-z0-9_-]/g,'').slice(0,64),mode:data.mode==='coop'?'coop':'solo',difficulty:['normal','hard','insanity'].includes(data.difficulty)?data.difficulty:'normal',name:cleanName(data.name),wave:asInt(data.wave,1,100000),cleared:asInt(data.cleared,0,100000),score:asInt(data.score,0,1e12),kills:asInt(data.kills,0,1e8),players:Array.isArray(data.players)?data.players.slice(0,4).map(cleanName):[cleanName(data.name)],at:new Date().toISOString()};
   if(!entry.id)entry.id=crypto.randomUUID();
   const prior=await loadScores();
   if(prior.entries.some(e=>e.id===entry.id))return {ok:true,persistent:prior.persistent};
@@ -89,7 +89,7 @@ function relayRaw(client, str){
   try {client.socket.write(encodeFrame(str));}catch{}
 }
 function notify(room, obj, except) {for(const c of room.members.values())if(c!==except)send(c,obj);}
-function roster(room){return {type:'roster',room:room.code,hostId:room.hostId,started:room.started,members:[...room.members.values()].map(c=>({id:c.id,name:c.name,hero:c.hero,ready:c.ready}))};}
+function roster(room){return {type:'roster',room:room.code,hostId:room.hostId,started:room.started,difficulty:room.difficulty||'normal',matchMode:room.mode,members:[...room.members.values()].map(c=>({id:c.id,name:c.name,hero:c.hero,ready:c.ready}))};}
 function broadcastRoster(room){notify(room,roster(room));}
 function randomCode(){let code;do{code=crypto.randomBytes(4).toString('hex').slice(0,6).toUpperCase()}while(rooms.has(code));return code;}
 function nameText(s){return typeof s==='string'?s.replace(/[<>\x00-\x1f]/g,'').trim().slice(0,18)||'Operative':'Operative'}
@@ -106,7 +106,7 @@ function handle(c,msg){
     if(c.room)leaveRoom(c);
     if(rooms.size>=150){send(c,{type:'error',message:'Server is at room capacity.'});return;}
     c.name=nameText(msg.name);c.hero=Number.isInteger(msg.hero)&&msg.hero>=0&&msg.hero<8?msg.hero:0;c.ready=true;
-    const code=randomCode(),room={code,hostId:c.id,members:new Map([[c.id,c]]),started:false,mode:'campaign',runSubmitted:false};rooms.set(code,room);c.room=room;
+    const code=randomCode(),room={code,hostId:c.id,members:new Map([[c.id,c]]),started:false,mode:'campaign',difficulty:'normal',runSubmitted:false};rooms.set(code,room);c.room=room;
     broadcastRoster(room);return;
   }
   if(msg.type==='join'){
@@ -120,14 +120,16 @@ function handle(c,msg){
   const room=c.room;
   if(!room)return;
   if(msg.type==='leave'){leaveRoom(c);send(c,{type:'left'});return;}
+  if(msg.type==='settings'&&c.id===room.hostId&&!room.started){const d=['normal','hard','insanity'].includes(msg.difficulty)?msg.difficulty:'normal';room.difficulty=d;room.mode=msg.mode==='endless'?'endless':'campaign';broadcastRoster(room);return;}
   if(msg.type==='select'&&!room.started){const wanted=Number(msg.hero);if(!Number.isInteger(wanted)||wanted<0||wanted>7)return;c.hero=chooseHero(room,wanted,c);c.ready=c.id===room.hostId;broadcastRoster(room);return;}
   if(msg.type==='ready'&&!room.started){c.ready=!!msg.ready;broadcastRoster(room);return;}
   if(msg.type==='start'&&c.id===room.hostId&&!room.started){
     if([...room.members.values()].some(u=>!u.ready)){send(c,{type:'error',message:'Everyone must press READY before the host starts.'});return;}
-    room.started=true;room.mode=msg.mode==='endless'?'endless':'campaign';room.startedAt=Date.now();room.runSubmitted=false;notify(room,{type:'start',hostId:c.id,mode:room.mode,members:roster(room).members});return;
+    const d=['normal','hard','insanity'].includes(msg.difficulty)?msg.difficulty:'normal';if(d==='insanity'&&room.members.size<2){send(c,{type:'error',message:'INSANITY needs at least two connected players.'});return;}
+    room.started=true;room.difficulty=d;room.mode=msg.mode==='endless'?'endless':'campaign';room.startedAt=Date.now();room.runSubmitted=false;notify(room,{type:'start',hostId:c.id,mode:room.mode,difficulty:room.difficulty,members:roster(room).members});return;
   }
   if(!room.started)return;
-  if(msg.type==='restart'&&c.id===room.hostId){room.mode=msg.mode==='endless'?'endless':'campaign';room.runSubmitted=false;return;}
+  if(msg.type==='restart'&&c.id===room.hostId){room.mode=msg.mode==='endless'?'endless':'campaign';room.difficulty=['normal','hard','insanity'].includes(msg.difficulty)?msg.difficulty:room.difficulty;room.runSubmitted=false;return;}
   if(msg.type==='run_end'&&c.id===room.hostId&&room.mode==='endless'&&!room.runSubmitted){
     const data=msg.data;if(!data||typeof data!=='object')return;
     if(!Number.isFinite(Number(data.wave))||!Number.isFinite(Number(data.score)))return;

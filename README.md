@@ -1,82 +1,48 @@
-# CROWN//CRISIS — V31 · ENDLESS SURVIVAL + CO-OP
+# CROWN//CRISIS — BETA V33: RARE TEMPORARY POWERUPS
 
-A self-contained, pixel-art alien shooter with solo and four-player online play.
-**This is a complete replacement for the existing V30 GitHub project, not an additional subfolder.**
+This is a targeted update to V32. Keep your existing GitHub repository and Render service.
 
-## Quick upgrade: your existing GitHub + Render site
+## What changed
 
-Your repository shown earlier: https://github.com/goochandrew79-ai/crown-crisis-coop1
-Your Render website: https://crown-crisis-coop.onrender.com/
+- **Endless Survival upgrade ranks remain uncapped**, with increasing prices and diminishing bonuses. The original six primary-gun unlock tiers remain intact. Higher ranks provide small additional improvements instead of a new weapon each time.
+- After an ordinary alien dies, there is a **0.75% chance** of a temporary pickup. Bosses do not have this random drop rule.
+- Pickups must be collected by walking over them; they disappear after **8 seconds** on the ground. Up to seven can exist at once. They do not give money and do not increase permanent upgrade ranks.
+- All pickup effects last about **2.6–2.9 seconds** and do not stack multiplicatively; another pickup of the same type refreshes the timer.
 
-1. Download and **Extract All** from `crown_crisis_v31_endless_coop_render.zip`.
-2. In your existing GitHub repository, open the **Code** tab.
-3. At the repository root, choose **Add file -> Upload files**. Upload the new `server.js`, `package.json`, and `README.md` from the extracted folder (replace the old versions). Select **Commit changes**.
-4. Click the existing **public** folder in GitHub, then choose **Add file -> Upload files**. Upload the new `index.html` found inside the extracted `public` folder. Commit changes.
-5. Confirm GitHub looks like this (folder order does NOT matter):
+| Pickup | Effect | Duration |
+|---|---|---|
+| Power Shot (red) | 12% more damage for friendly projectiles | 2.6 seconds |
+| Overclock (gold) | 17% faster primary fire rate | 2.6 seconds |
+| Sprint (green) | 18% faster movement | 2.7 seconds |
+| Double Dash (blue) | Two quick successive dashes | 2.9-second activation window |
+
+In co-op, the room host chooses random drops and checks pickup collection. Only the first player to reach a pickup receives its effect. Other players see the pickup and the receiving fighter's active effect through synchronized snapshots.
+
+## Update the GitHub / Render game
+
+1. Extract `crown_crisis_v33_powerups_render.zip`.
+2. In your existing repository **https://github.com/goochandrew79-ai/crown-crisis-coop1**, replace these files in the same locations:
 
        crown-crisis-coop1/
+         server.js
+         package.json
+         README.md
          public/
            index.html
-         package.json
-         server.js
-         README.md
 
-6. Render normally redeploys when GitHub changes. If it does not, go to **Render -> your Web Service -> Manual Deploy -> Deploy latest commit**. Wait until the event says **Live** and refresh your Render URL (Ctrl+Shift+R).
-7. You do **not** need to create a new Render app, buy a domain, or change `npm start`.
+3. Commit all changes. If uploading to GitHub's website does not overwrite an existing file, open that file, use the editor, and paste the replacement content; for the large HTML file, GitHub Desktop is easier (clone → copy over → commit → push).
+4. Visit **https://dashboard.render.com/**. Wait for an automatic deployment or select **Manual Deploy → Deploy latest commit**.
+5. When status is **Live**, press **Ctrl+Shift+R** on **https://crown-crisis-coop.onrender.com/** to load the new game.
+6. Test solo and multiplayer: check red/yellow/green/blue diamonds, collect one, and look for its timer near the bottom of the game display.
 
-If GitHub complains about the upload, do Step 3 and Step 4 separately as above. Do not upload the ZIP itself to the repository.
+**Important:** This is a random feature: seeing no pickups in a short session is normal. Around 133 regular monster kills are expected per pickup on average, but randomness can vary greatly. The game needs the server for multiplayer. Opening `public/index.html` directly still supports solo play.
 
-## Play
+## Beta tests to run
 
-- **15-Wave Campaign:** Original mode, all eight characters, unlock campaign medals as usual.
-- **Boss Rush:** The final Shark boss, now substantially tougher than before.
-- **Endless Survival:** Click the gold **ENDLESS SURVIVAL** button on the menu. Alien speed, health, damage, numbers, and elite frequency grow as you reach higher waves. Waves are not capped: play toward 250, 500, and beyond until defeated.
-- **Survival bosses:** Overmind every 10th wave except the Shark encounter every 25th wave. The Shark is much tougher and returns with a radial bullet barrage.
-- **Between-wave shopping:** Shops after wave 3 and then every five cleared waves; the rest of the waves restart automatically after a brief breather.
-- **4-player Endless:** Open **ONLINE CO-OP**, select **Match type -> Endless Survival**, share the room code, everyone presses Ready, then host starts. Each player keeps their own gold, upgrades, and unique abilities. Squad revive is hold R near a fallen teammate.
-- **Scores:** Open **SURVIVAL SCORES** on the main menu. Enter a nickname there *before* playing solo, if you want your name on the board. Rank is based on **highest wave reached**, with total score as the tie breaker. Solo and co-op scores can be filtered.
-- **End of run:** The game-over screen displays wave reached, waves cleared, kills, and score. You can take screenshots and post them to Discord even when the leaderboard isn't available.
+- Solo, Normal and Hard; Campaign and Endless: collect each pickup and confirm expiration.
+- Co-op: have both players approach one drop; only one player should receive the buff. Confirm the guest sees the pickup spawn and disappear.
+- Test Double Dash with two presses of Dash within 2.9 seconds.
+- Open an Endless shop with high-rank upgrades: price increases and no hard cap.
+- Verify a new wave removes uncollected pickups, and older characters/abilities still work.
 
-Survival runs **do not** award the original 15-wave campaign achievements. Boss Rush also stays separate.
-
-## Leaderboard on free Render hosting
-
-The online leaderboard works immediately with no extra signup. **Without external storage, it is TEMPORARY.** Render Free's web service filesystem and server memory are reset when it restarts, redeploys, or spins down. So scores will disappear. The game warns about this on its Scores screen.
-
-### Make scores survive restarts for $0 with Upstash Redis (optional, recommended)
-
-1. Create a free account at https://upstash.com/ and create a **Redis** database on its **Free** tier.
-2. Open the database details and locate its **REST URL** and **REST TOKEN**. Keep the token secret.
-3. Go to your Render Web Service -> **Environment** -> **Add Environment Variable**.
-4. Add these two variables, inserting your actual credential values:
-
-       UPSTASH_REDIS_REST_URL   https://YOUR-DATABASE.upstash.io
-       UPSTASH_REDIS_REST_TOKEN YOUR_SECRET_TOKEN
-
-5. Save / deploy the environment changes. The game now reports **Persistent scores enabled** when the database responds.
-
-**Never paste the REST token into GitHub, into a screenshot, or into this chat.** Store it only as a Render environment variable. This project intentionally has no local `config.json` with secrets.
-
-Official documentation: https://upstash.com/docs/redis/features/restapi and https://render.com/docs/free
-
-If Redis is unavailable, the leaderboard safely falls back to the temporary server-memory board. This is a friendly competition board, **not tamper-proof**: scores originate from the player's own browser or the co-op host's simulation. For prized competitions, use screenshots and moderator review.
-
-## Run locally (optional)
-
-Install Node.js 18 or newer, open a terminal in this folder, and run:
-
-    npm start
-
-Open http://localhost:3000/ in a browser. To change the port, set `PORT` as an environment variable.
-
-This project uses **no runtime npm dependencies**; Node's built-in HTTP and WebSocket support in this code handle up to four players per room. The host is authoritative for enemy movement and shared combat. If the host disconnects, the room closes. This is a prototype intended for friends, not a cheat-proof dedicated server.
-
-## Developer / QA notes
-
-- `server.js` — HTTP server, WebSocket rooms, and optional persistent leaderboard API.
-- `public/index.html` — game client with embedded artwork and gameplay; no asset CDN required.
-- `GET /health` — basic server health check.
-- `GET /api/leaderboard` — public scoreboard JSON, including `persistent` flag.
-- `POST /api/leaderboard` — solo score submission; co-op scores are submitted by the lobby host over WebSocket.
-- Scores rank by deepest wave and then points. Server keeps up to 100 records.
-- The original campaign still has exactly 15 waves; Endless uses its own unbounded wave counter.
+Additional existing V32 rules, difficulty multipliers, achievements, leaderboard and browser resizing are preserved.
