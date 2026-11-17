@@ -11,7 +11,7 @@ const PORT = Number(process.env.PORT || 3000);
 const rooms = new Map();
 const clients = new Map();
 let nextId = 0;
-// V34: short outages must not eject a fighter from a long Endless run.
+// V39: short outages also preserve pre-game lobbies and invite codes.
 // Rooms are still ephemeral: a Render restart or a lost host browser can't restore a match.
 const RECONNECT_GRACE_MS = 120000;
 
@@ -104,49 +104,69 @@ function leaveRoom(c){
   if(room.hostId===c.id){rooms.delete(room.code);for(const other of room.members.values()){other.room=null;other.ready=false;send(other,{type:'closed',reason:'The host left. The match has ended.'});}room.members.clear();}
   else{notify(room,{type:'departed',id:c.id});broadcastRoster(room);if(!room.members.size)rooms.delete(room.code);}
 }
+
+function takeOverSlot(c,room,prior){
+  if(c===prior){broadcastRoster(room);return;}
+  if(c.room&&c.room!==room)leaveRoom(c);
+  const tempId=c.id,oldSocket=prior.socket;
+  clearTimeout(prior.reconnectTimer);prior.reconnectTimer=null;
+  clients.delete(tempId);
+  c.id=prior.id;c.name=prior.name;c.hero=prior.hero;c.ready=prior.ready;
+  c.room=room;c.resumeToken=prior.resumeToken;c.connected=true;
+  room.members.set(c.id,c);clients.set(c.id,c);
+  prior.room=null;
+  if(oldSocket&&!oldSocket.destroyed)oldSocket.destroy();
+  send(c,{type:'resumed',id:c.id,hostId:room.hostId,room:room.code,started:room.started,matchMode:room.mode,difficulty:room.difficulty,members:roster(room).members});
+  notify(room,{type:'peer_status',id:c.id,online:true});
+  broadcastRoster(room);
+  if(room.started){
+    if(c.id===room.hostId)notify(room,{type:'host_resumed'});
+    else send(room.members.get(room.hostId),{type:'resync_request',id:c.id});
+  }
+  console.log('[resume]',room.code,c.id,c.name,'started',room.started,'members',room.members.size);
+}
+function findByToken(room,token){return token&&room?[...room.members.values()].find(c=>c.resumeToken===token):null}
+function validToken(msg){return typeof msg.token==='string'&&msg.token.length>=24&&msg.token.length<=128?msg.token:''}
 function handle(c,msg){
   if (!msg || typeof msg!=='object'||typeof msg.type!=='string')return;
   if(msg.type==='ping'){send(c,{type:'pong',at:Date.now(),echo:Number(msg.t)||0});return;}
   if(msg.type==='resume'){
-    const code=String(msg.room||'').trim().toUpperCase();
-    const token=typeof msg.token==='string'?msg.token:'';
-    const room=rooms.get(code);
-    const prior=room&&[...room.members.values()].find(member=>member.resumeToken&&member.resumeToken===token);
-    if(!prior){send(c,{type:'resume_failed',reason:'Reconnection window expired, the room was lost, or this tab has a different session token.'});return;}
-    const tempId=c.id,oldSocket=prior.socket;
-    clearTimeout(prior.reconnectTimer);prior.reconnectTimer=null;
-    clients.delete(tempId);
-    c.id=prior.id;c.name=prior.name;c.hero=prior.hero;c.ready=prior.ready;
-    c.room=room;c.resumeToken=prior.resumeToken;c.connected=true;
-    room.members.set(c.id,c);clients.set(c.id,c);
-    prior.room=null;
-    // A broken network link can leave the old TCP session half-open. Allow the
-    // holder of the same cryptographic session token to take over the slot.
-    if(oldSocket&&!oldSocket.destroyed)oldSocket.destroy();
-    send(c,{type:'resumed',id:c.id,hostId:room.hostId,room:room.code,started:room.started,matchMode:room.mode,difficulty:room.difficulty,members:roster(room).members});
-    notify(room,{type:'peer_status',id:c.id,online:true});
-    broadcastRoster(room);
-    if(room.started){
-      if(c.id===room.hostId)notify(room,{type:'host_resumed'});
-      else send(room.members.get(room.hostId),{type:'resync_request',id:c.id});
+    const code=String(msg.room||'').trim().toUpperCase(),token=validToken(msg);
+    const room=rooms.get(code),prior=findByToken(room,token);
+    if(!prior){
+      const reasonCode=room?'token_mismatch':'room_missing';
+      console.warn('[resume-failed]',code||'-',reasonCode,'requester',c.id);
+      send(c,{type:'resume_failed',reasonCode,reason:room?'That session could not be recovered. Use the invite link to join again if the match has not begun.':'That room no longer exists on this server. Ask the host for a fresh invite link.'});
+      return;
     }
-    console.log('[resume]',room.code,c.id,c.name,'members',room.members.size,'newConn',c.openedAt);
-    return;
+    takeOverSlot(c,room,prior);return;
   }
   if(msg.type==='create'){
+    const token=validToken(msg);
+    if(token){
+      for(const existing of rooms.values()){
+        const prior=findByToken(existing,token);
+        if(prior){takeOverSlot(c,existing,prior);return;}
+      }
+    }
     if(c.room)leaveRoom(c);
     if(rooms.size>=150){send(c,{type:'error',message:'Server is at room capacity.'});return;}
-    c.resumeToken=typeof msg.token==='string'&&msg.token.length>=24&&msg.token.length<=128?msg.token:crypto.randomUUID();c.name=nameText(msg.name);c.hero=Number.isInteger(msg.hero)&&msg.hero>=0&&msg.hero<8?msg.hero:0;c.ready=true;
+    c.resumeToken=token||crypto.randomUUID();c.name=nameText(msg.name);c.hero=Number.isInteger(msg.hero)&&msg.hero>=0&&msg.hero<8?msg.hero:0;c.ready=true;
     const code=randomCode(),room={code,hostId:c.id,members:new Map([[c.id,c]]),started:false,mode:'campaign',difficulty:'normal',runSubmitted:false};rooms.set(code,room);c.room=room;
+    console.log('[create]',code,'host',c.id,'origin',c.socket?.remoteAddress||'-');
     broadcastRoster(room);return;
   }
   if(msg.type==='join'){
+    const code=String(msg.room||'').trim().toUpperCase(),room=rooms.get(code),token=validToken(msg);
+    if(!room){console.warn('[join-failed]',code||'-','room-missing','requester',c.id);send(c,{type:'error',message:'Room not found on this server. Open the exact invite link from your host; rooms cannot cross between different Render website addresses.'});return;}
+    const prior=findByToken(room,token);
+    if(prior){takeOverSlot(c,room,prior);return;}
+    if(room.started){send(c,{type:'error',message:'This match already started. Only disconnected players can reconnect.'});return;}
+    if(room.members.size>=4){send(c,{type:'error',message:'That room already has four reserved player slots.'});return;}
     if(c.room)leaveRoom(c);
-    const code=String(msg.room||'').trim().toUpperCase();const room=rooms.get(code);
-    if(!room){send(c,{type:'error',message:'Room not found. Check the six-character code.'});return;}
-    if(room.started){send(c,{type:'error',message:'That match has started. Join a new lobby.'});return;}
-    if(room.members.size>=4){send(c,{type:'error',message:'That room already has four players.'});return;}
-    c.resumeToken=typeof msg.token==='string'&&msg.token.length>=24&&msg.token.length<=128?msg.token:crypto.randomUUID();c.name=nameText(msg.name);c.hero=chooseHero(room,msg.hero,c);c.ready=false;c.room=room;room.members.set(c.id,c);broadcastRoster(room);return;
+    c.resumeToken=token||crypto.randomUUID();c.name=nameText(msg.name);c.hero=chooseHero(room,msg.hero,c);c.ready=false;c.room=room;room.members.set(c.id,c);
+    console.log('[join]',code,c.id,c.name,'members',room.members.size);
+    broadcastRoster(room);return;
   }
   const room=c.room;
   if(!room)return;
@@ -155,7 +175,7 @@ function handle(c,msg){
   if(msg.type==='select'&&!room.started){const wanted=Number(msg.hero);if(!Number.isInteger(wanted)||wanted<0||wanted>7)return;c.hero=chooseHero(room,wanted,c);c.ready=c.id===room.hostId;broadcastRoster(room);return;}
   if(msg.type==='ready'&&!room.started){c.ready=!!msg.ready;broadcastRoster(room);return;}
   if(msg.type==='start'&&c.id===room.hostId&&!room.started){
-    if([...room.members.values()].some(u=>!u.ready)){send(c,{type:'error',message:'Everyone must press READY before the host starts.'});return;}
+    if([...room.members.values()].some(u=>!u.ready||!u.connected)){send(c,{type:'error',message:'All players must be connected and Ready before the host starts.'});return;}
     const d=['normal','hard','insanity'].includes(msg.difficulty)?msg.difficulty:'normal';if(d==='insanity'&&room.members.size<2){send(c,{type:'error',message:'INSANITY needs at least two connected players.'});return;}
     room.started=true;room.difficulty=d;room.mode=msg.mode==='endless'?'endless':'campaign';room.startedAt=Date.now();room.runSubmitted=false;notify(room,{type:'start',hostId:c.id,mode:room.mode,difficulty:room.difficulty,members:roster(room).members});return;
   }
@@ -217,7 +237,8 @@ server.on('upgrade',(req,socket,head)=>{
       console.log('[ws-close]',c.room?.code||'-',c.id,'ageMs',held,'code',closeCode??'-','reason',endCause,'frames',c.frameCount);
       clients.delete(c.id);
       const room=c.room;if(!room)return;
-      if(!room.started){leaveRoom(c);return;}
+      // Preserve lobby members too: a one-second Wi-Fi hiccup must not destroy
+      // the six-character invite code before the match begins.
       c.connected=false;c.socket=null;c.lastDisconnectedAt=Date.now();
       notify(room,{type:'peer_status',id:c.id,online:false,graceMs:RECONNECT_GRACE_MS});
       broadcastRoster(room);
@@ -225,7 +246,7 @@ server.on('upgrade',(req,socket,head)=>{
         if(room.members.get(c.id)===c&&!c.connected){console.log('[expired]',room.code,c.id);leaveRoom(c);}
       },RECONNECT_GRACE_MS);
       c.reconnectTimer.unref?.();
-      console.log('[disconnected, reserving seat]',room.code,c.id);
+      console.log('[disconnected, reserving seat]',room.code,c.id,'started',room.started);
     }
     socket.on('close',cleanup);
     socket.on('end',()=>{if(!closing)endCause=closeCode?'browser sent close frame':'peer or proxy sent TCP FIN';});

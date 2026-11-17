@@ -1,54 +1,25 @@
-# CROWN//CRISIS V36 — Multiplayer Connection Stability
+# CROWN//CRISIS — V39 Invite & Lobby Reliability Fix
 
-Version 36 updates the four-player browser game and the Node.js room server. It is based on V35 and retains reconnect reservations, Normal / Hard / Insanity, Endless Survival, pickup abilities, achievements, the original combat and character selection.
+This release corrects a bug in the previous server where a momentary WebSocket disconnect removed a player from a **pre-game lobby immediately**. If that player was the host, the room code disappeared, leaving invite links unusable and producing `resume_failed` messages.
 
-## What's fixed
+## What's changed
 
-- **WebSocket fragmentation:** The prior custom server rejected messages that were broken into multiple WebSocket frames. The V36 server safely reassembles fragmented text messages, supports control ping/pong during fragmentation, and rejects invalid/oversized messages with documented close codes instead of silently destroying connections.
-- **Reconnect retry spiral:** V35 reset retry attempts immediately after a successful resume. When a socket failed again after one second, this caused repeated rapid reconnection. V36 only resets retry backoff after the connection has stayed open for 30 seconds.
-- **Better diagnostics:** Render Logs now includes `[ws-close]` with room, player ID, connection age, close code (when sent), cause, and number of frames; `[ws-protocol]`, `[ws-heartbeat-timeout]`, and `[ws-error]` distinguish possible failure sources. The browser banner also displays the WebSocket close code, and browser DevTools logs a useful message.
+- Invited friends automatically attempt to join the room from `https://YOUR-RENDER-URL/?room=ABC123` (instead of only having the code prefilled).
+- Create/Join requests retry for an extended period if Render is slow to wake up or the connection is interrupted before the room's roster is confirmed. Server-side token matching makes retries idempotent, so a second request does not create duplicate rooms or players.
+- Lobby seats, including the host's, now remain reserved for **two minutes** if disconnected, just like in-game seats. The lobby shows `RECONNECTING` for those players.
+- Start is blocked until **all players are connected and Ready**.
+- Server logs `[create]`, `[join]`, `[join-failed]`, `[resume]`, and `[resume-failed]` to expose room failures.
+- The current V38 combat, ghosts, shops, performance and gameplay are unchanged.
 
-This improves protocol handling and recovery. It does not prevent ordinary internet outages, Render instance replacement, a closed host tab, or overloaded client computers. We have not verified this deployment on the user's live Render instance.
+## Install / update your current Render service
 
-## Update your existing GitHub / Render service
+1. Extract this ZIP. Do **not** upload the ZIP as a file to GitHub.
+2. In your GitHub repository, replace the root-level `server.js` and `package.json` (and optionally `README.md`).
+3. Open GitHub's `public` folder; replace `index.html` inside that folder.
+4. Commit changes. In Render, deploy the latest commit and check that deployment is Live.
+5. Have all players hard-refresh with Ctrl+Shift+R and **create a fresh lobby**. A pre-existing lobby cannot survive a Render redeploy.
+6. Copy an invite via the in-game **COPY INVITE LINK** button. Every player must use exactly the same Render domain; e.g. `crown-crisis-coop1.onrender.com` and `crown-crisis-coop.onrender.com` are **different** servers and cannot share room codes.
 
-1. Download the **V36 ZIP** and extract it on your computer.
-2. Open your existing GitHub repository (for example `https://github.com/goochandrew79-ai/crown-crisis-coop1`).
-3. At the repository root, replace `server.js`, `package.json`, and optionally `README.md` with the V36 files, then commit the changes.
-4. Open the `public` folder and replace its `index.html` with the V36 `public/index.html`; commit.
-5. Verify the GitHub layout:
+**Hosting caveats:** In-memory rooms do not survive server restarts or scaling across two Render instances. Run a single instance for now. A host browser tab reload also loses its active game simulation; reconnect without reloading the tab.
 
-   ```text
-   crown-crisis-coop1/
-   ├── package.json
-   ├── server.js
-   ├── README.md
-   └── public/
-       └── index.html
-   ```
-
-6. In the Render dashboard, open the service and check that the new deploy is **Live**; if needed choose **Manual Deploy → Deploy latest commit**.
-7. On **every player's computer**, open your Render URL and press **Ctrl+Shift+R** before starting a fresh room.
-8. Use **one Render instance / replica** for this version. Rooms live only in that Node process. Multiple instances without shared state would send different participants to different rooms and break reconnection.
-
-## How to test
-
-1. Create a room and connect a second player.
-2. Play through multiple Endless waves, especially those with lots of shots and aliens. Track whether Render Logs still shows repeated `[disconnected, reserving seat]` messages.
-3. Briefly disconnect and restore **guest** Wi-Fi without closing the game tab. Player should resume into the same room within two minutes.
-4. Try the same test with the host. Guests should see a host-connection warning, then the game should resume when host returns.
-5. If the connection still loops, open **Render → Logs**, filter for `[ws-close]`, `[ws-protocol]`, `[ws-error]`, and `[ws-heartbeat-timeout]`, and send a screenshot showing lines *immediately before and after the disconnect*.
-6. From a PC with the game open, press **F12 → Console** and look for `[CROWN//CRISIS connection] closed`. The `code`, `reason`, and `connectedForMs` values will help identify where the connection ended.
-
-Notes: A browser close code **1006** indicates an abnormal closure without a completed close handshake; it doesn't identify the responsible network component. Code **1002** means a WebSocket protocol error, **1009** means the message was too large, and **4000** indicates the game's 42-second application ping timeout. A Render restart cannot resume in-memory game rooms.
-
-## Run locally (optional)
-
-Requires Node.js 18 or later:
-
-```sh
-npm install
-npm start
-```
-
-Open `http://localhost:3000`. The server has a `/health` endpoint.
+For a beta test, invite a friend, temporarily toggle host Wi-Fi off/on *before starting*, verify the room survives, and then start a co-op match. Repeat while a match is running.
